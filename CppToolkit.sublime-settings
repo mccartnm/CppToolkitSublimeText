@@ -4,5 +4,13 @@
     // ----------------- [WARNING] -----------------
     // Always make changes in the user settings
     // ----------------- [WARNING] -----------------
-    "foo" : "bar"
+
+    "source_file_types" : [
+        "cpp",
+    ],
+
+    "header_file_types" : [
+        "h",
+        "hpp"
+    ]
 }

@@ -74,7 +74,7 @@ class CppRefactorListener(sublime_plugin.EventListener):
             command=command,
             args=args,
             pos=pos,
-            current_file_type='header',
+            current_file_type='header_file',
             current_word=current_word,
             current_line=current_line,
             header=header,
@@ -138,19 +138,29 @@ class CppRefactorListener(sublime_plugin.EventListener):
         header_or_source = None
         other_file = None
 
-        base, filetype = os.path.splitext(current_file)
-        if filetype in ('.h', '.hpp'):
-            header_or_source = 'header'
-            if os.path.isfile(base + '.cpp'):
-                other_file = base + '.cpp'
+        settings = sublime.load_settings('CppToolkit.sublime-settings')
 
-        elif filetype in ('.cpp',):
+        base, filetype = os.path.splitext(current_file)
+
+        filetype = filetype.replace('.', '', 1)
+
+        header_types = settings.get("header_file_types", ["h", "hpp"])
+        source_types = settings.get("source_file_types", ["cpp"])
+
+        if filetype in header_types:
+            header_or_source = 'header'
+            for source_type in source_types:
+                if os.path.isfile(base + '.' + source_type):
+                    other_file = base + '.' + source_type
+                    break
+
+        elif filetype in source_types:
             header_or_source = 'source'
 
-            if os.path.isfile(base + '.h'):
-                other_file = base + '.h'
-            elif os.path.isfile(base + '.hpp'):
-                other_file = base + '.hpp'
+            for header_type in header_types:
+                if os.path.isfile(base + '.' + header_type):
+                    other_file = base + '.' + header_type
+                    break
 
         if header_or_source is None or other_file is None:
             return # This isn't a C++ file
