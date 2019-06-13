@@ -61,3 +61,11 @@ To install use these commands (once it's up on the Sublime Package Repository).
 * Type `install` and select `Package Control: Install Package`
 * Type `CppToolkit` and select `CppToolkit`
 
+# Roadmap
+There are many things to do for this plugin that I'm hoping to tick away at in my spare time
+
+1. Basic preprocess for things like `#ifdef 0 ... #endif` clauses
+2. Camel case/Snake case conversion when needed
+3. Switch statement breakout (based on some kind of classifier)
+4. Smart inject based on other declarations in the source rather than always at the end
+5. Reverse implement to go from source to header under a given privilege
