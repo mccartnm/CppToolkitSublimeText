@@ -2,10 +2,14 @@ Cpp Toolkit
 ===========
 A collection of utilities for managing C++ code implementation.
 
+> Disclamer: Sublime is not a fully featured C++ IDE and this plugin doesn't try to make it one. It simply tries to speed up your usual work
+
 # Capabilities
 
 ## Auto Implement
 Many IDEs out there make use their inherent understanding of you project through syntax and preprocessing to present perks like being able to automatically declare methods from the header within the source. This save the developer _loads_ of time.
+
+![Usability](/img/header_a.jpg?raw=true)
 
 ## A Scenario
 Let's say you have the header:
@@ -43,16 +47,17 @@ With `Cpp Toolkit`, the workflow is:
 
 And bam! You'll be moved to the source file, all the right guts and ownership will be filled in, no pesky non-const classifiers or default values, and your cursor will be right where you need it to start typing the function body!
 
+> Note: At the moment, this assumes, just like the `Alt + O` shortcut, that the header and implentation are next to each other in the filesystem. In the future I may add ways to declare an implementation root or location or some such.
+
 ### The Catch
-Ultimately, this tool is parsing the file and doing the best job it can but, as any C++ developer knows, the language has quite a few caveats so you may not get the perfect signature or ownership every time however it should still get you moving in the right direction.
+Ultimately, this tool is parsing the file and doing what it can with immediate information but, as any C++ developer knows, the language has quite a few caveats so you may not get the perfect signature or ownership every time however it should still get you moving in the right direction and speed up _a lot_ of typing.
 
 # Install
 Using Package Control [Sublime Package Manager](http://wbond.net/sublime_packages/package_control)
 
-To install use these commands.
+To install use these commands (once it's up on the Sublime Package Repository).
 
 * Hit `Ctrl + Shift + P`
 * Type `install` and select `Package Control: Install Package`
 * Type `CppToolkit` and select `CppToolkit`
-
 

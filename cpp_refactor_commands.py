@@ -8,6 +8,7 @@ import json
 import sublime
 import sublime_plugin
 
+from copy import deepcopy
 
 class CppTokenizer(object):
     """
@@ -16,10 +17,14 @@ class CppTokenizer(object):
     """
     DELIMITS = ( '*', '=', '{', '}', '\'', '\"', '(', ')', ';', ':', ' ', '\n', '\t' )
 
-    def __init__(self, view, start, end):
+    def __init__(self, view, start=0, end=None, use_line=None):
         self._view = view
         self._current = start
-        self._end = end - self._view.line_height()
+        if end:
+            self._end = end - self._view.line_height()
+        else:
+            self._end = self._view.layout_extent()[1]
+        self._use_line = use_line
         self._current_tokens = None
 
 
@@ -81,16 +86,19 @@ class CppTokenizer(object):
         # Grab a token list
         while (self._current_tokens in (None, [])):
 
-            if self._current > self._end:
-                # We've made it where we wanted to go
-                self._current_tokens = None
-                return None
+            if self._use_line is not None:
+                self._current_tokens = self._get_tokens(self._use_line)
+            else:
+                if self._current > self._end:
+                    # We've made it where we wanted to go
+                    self._current_tokens = None
+                    return None
 
-            toks = self._get_tokens(self._context_line(self._current).strip())
-            self._current += self._view.line_height()
-            if toks:
-                self._current_tokens = toks
-                break
+                toks = self._get_tokens(self._context_line(self._current).strip())
+                self._current += self._view.line_height()
+                if toks:
+                    self._current_tokens = toks
+                    break
 
         # The active token awaits!
         current_token = self._current_tokens.pop(0)
@@ -123,6 +131,12 @@ class CppTokenizer(object):
 
         return current_token
 
+    def current_point(self):
+        """
+        :return: sublime point that dictates where in the file we are
+        """
+        # FIXME: Need a better understanding of X column
+        return self._view.layout_to_text((10000, self._current))
 
     def skip_line(self):
         """
@@ -230,6 +244,71 @@ class CppTokenizer(object):
         return (chain + ([active_proc] if active_proc else []))
 
 
+    @classmethod
+    def location_outside(cls, view, root_ownership):
+        """
+        :return: point - location outside of the ending scope of our class, struct,
+        or namespace
+        """
+        izer = cls(view)
+
+        found_proc = False
+        scope_count = 0
+
+        while True:
+            token = izer.next()
+            if token is None:
+                break # Nothing left
+
+            if not found_proc and token == root_ownership[0]:
+                #
+                # We have the right type, now we just need to check if we have the
+                # right name
+                #
+                while True:
+                    inner_tok = izer.next()
+                    if inner_tok is None or inner_tok.endswith(';'):
+                        found_proc = False
+                        break # Not the right one
+
+                    if inner_tok == root_ownership[1]:
+                        #
+                        # We have the proc name, but we still have to make sure
+                        # this isn't a forward declare
+                        #
+                        found_proc = True
+
+                    if inner_tok == '{':
+                        #
+                        # If, by this point, we have found the item, it means
+                        # we're in it's scope, we now just work until we exit
+                        # said scope
+                        #
+                        # However if we haven't found the item, it means we're
+                        # looking at another item
+                        #
+                        break
+
+            if found_proc:
+                #
+                # Now that we know about our type, we need to keep moving until
+                # we find the end of it's scope
+                #
+                if token == '{':
+                    scope_count += 1
+                if token == '}':
+                    if scope_count == 0:
+                        # We've made it!
+                        if root_ownership[0] != 'namespace':
+                            izer.spin_until(';') # Get passed the terminator
+                        return izer.current_point()
+                    else:
+                        scope_count -= 1
+
+        # We couldn't find the end of that scope
+        return None
+
+
 class _BaseCppRefactorMeta(type):
     """
     Registry class for any commands that we want to be utilized in the menus and
@@ -287,6 +366,7 @@ class _BaseCppCommand(sublime_plugin.TextCommand, metaclass=_BaseCppRefactorMeta
     def get_commands(cls, view, command, args, pos, current_line, header, source):
         pass
 
+
 # ----------------------------------------------------------------------------
 # -- Text Commands
 
@@ -299,20 +379,25 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
     # This is a header only function
     flags = _BaseCppCommand.IN_HEADER
 
+    # FIXME: This has a finite limitation on templating, we need to handle this
+    # better. Probably with the tokenizer and some deeper parsing
     HEADER_FUNCTION = re.compile(
-        r'(\s+)?(?P<static_or_virtual>static|virtual)?(\s+)(?P<type>[^\s]+)(\s)?'\
+        r'(\s+)?(?P<static_or_virtual>static|virtual)?(\s+)?'\
+        r'(?P<is_const>const)?(\s)?(?P<type>[^\s]+)(\s)?'\
+        r'(?P<encap>\<(?:(?:\<(?:(?:\<(?:[^<>])*\>)|(?:[^<>]))*\>)|(?:[^<>]))*\>)?(\s)'\
         r'(?P<method>[^\s\(]+)((\s+)?\()+?(?P<args>[^\;]+)?'\
         r'((\s+)?\))+?(\s+)?(?P<addendum>[^\;]+)?'
     )
 
     FUNC_PRIV = re.compile(r'(\s+)?(?P<priv>.+)\:$')
 
-    DECLARE_FORMAT = "{type} {ownership}{method}({source_arguments}){classifiers}"
+    DECLARE_FORMAT = "{type}{ownership}{method}({source_arguments}){classifiers}"
 
     @classmethod
     def get_commands(cls, view, command, args, pos, current_line, header, source):
         """
         Check to see if this is a header function of some sort
+        TODO: Use the tokenizer to parse the file rather than the regex mess
         """
         match = cls.HEADER_FUNCTION.match(current_line)
         if not match:
@@ -338,11 +423,26 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
 
         match_data = match.groupdict()
         match_data.update({
+            "current_line" : current_line,
             "ownership_chain" : chain,
             "function_priv" : func_priv
         })
 
-        return [match_data]
+        source_declare = deepcopy(match_data)
+        source_declare.update({ 'in_' : 'source' })
+
+        header_declare = deepcopy(match_data)
+        header_declare.update({ 'in_' : 'header' })
+
+        copy_declare = deepcopy(match_data)
+        copy_declare.update({ 'in_' : 'clipboard' })
+
+        return [
+            ["Declare In {}".format(os.path.basename(source)), 'source_file', source_declare],
+            # This works in the header_file
+            ["Declare In {}".format(os.path.basename(header)), 'header_file', header_declare],
+            ["Copy Declaration to Clipboard", 'header_file', copy_declare]
+        ]
 
 
     def _build_ownership(self, chain):
@@ -357,11 +457,27 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
     def run(self, edit, **data):
         """
         Build the source declaration and place it into the source file
+        TODO: Use the tokenizer to parse the file rather than all this hand holding
         """
         local_data = data.copy()
 
         # -- Ownership path (if any)
         local_data['ownership'] = self._build_ownership(data['ownership_chain'])
+
+        # -- Check for const and pointer/references
+        if data.get('is_const'):
+            local_data['type'] = 'const ' + local_data['type']
+
+        if data.get('encap'):
+            local_data['type'] += data['encap']
+
+        method = data.get('method')
+        if method.startswith('*') or method.startswith('&'):
+            point, method = method[0], method[1:]
+            local_data['type'] = local_data['type'] + ' ' + point
+            local_data['method'] = method
+        else:
+            local_data['type'] += ' '
 
         # -- Source Arguments
         if data['args'] is None:
@@ -384,14 +500,33 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
                 local_data['classifiers'] += ' const'
 
         decl = CppDeclareInSourceCommand.DECLARE_FORMAT.format(**local_data)
-        self.view.insert(edit, self.view.size(), '\n\n' + decl + '\n{\n    \n}\n')
 
-        end_size = self.view.size()
-        row, col = self.view.rowcol(end_size)
+        if data['in_'] in ['header', 'source']:
+            full_boddy = '\n\n' + decl + '\n{\n    \n}\n';
 
-        self.view.sel().clear()
-        self.view.sel().add(sublime.Region(self.view.text_point(row - 2, 4)))
-        self.view.show_at_center(end_size)
+            if data['in_'] == 'source':
+                # For the time being, we declare at the end of the source file
+                point = self.view.size()
+
+            else:
+
+                # We attempt to declare just outside the highest ownership scope
+                if data['ownership_chain']:
+                    point = CppTokenizer.location_outside(self.view, data['ownership_chain'][0])
+                else:
+                    point = self.view.size()
+
+            self.view.insert(edit, point, full_boddy)
+            location = point + (len(full_boddy) - 3)
+            row, col = self.view.rowcol(location)
+
+            self.view.sel().clear()
+            self.view.sel().add(sublime.Region(self.view.text_point(row, col)))
+            self.view.show_at_center(location)
+
+        else:
+            full_boddy = decl + '\n{\n}\n';
+            sublime.set_clipboard(full_boddy)
 
 
 # ----------------------------------------------------------------------------

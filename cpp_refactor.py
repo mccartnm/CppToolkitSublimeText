@@ -69,17 +69,25 @@ class CppRefactorListener(sublime_plugin.EventListener):
 
             if menu_commands is not None:
                 for menu_option in menu_commands:
-                    menu_option.update({
+                    command_name, *menu_data = menu_option
+
+                    to_open = possible_command.default_open
+                    if len(menu_data) > 1:
+                        to_open, menu_data = menu_data
+                    else:
+                        menu_data = menu_data[0]
+
+                    menu_data.update({
                         "subcommand" : _BaseCppCommand.subl_command_name(possible_command),
-                        "default_open" : possible_command.default_open,
+                        "default_open" : to_open,
                         "header_file" : header,
                         "source_file" : source
                     })
                     output.append(
                         { "command" : "cpp_refactor",
-                          "caption" : "Declare In {}".format(os.path.basename(source)),
+                          "caption" : command_name,
                           "args" : {
-                            "data" : menu_option
+                            "data" : menu_data
                         } }
                     )
 
