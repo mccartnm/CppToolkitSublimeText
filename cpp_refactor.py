@@ -9,10 +9,10 @@ import sublime
 import sublime_plugin
 
 from .lib import utils
-from .cpp_refactor_commands import CppTokenizer, _BaseCppCommand
+from .cpp_refactor_commands import _BaseCppCommand, CppRefactorDetails
 
 __author__ = 'Michael McCartney'
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 
 
 def plugin_loaded():
@@ -28,8 +28,10 @@ def plugin_unloaded():
 
 class CppRefactorListener(sublime_plugin.EventListener):
     """
-    Event listener for handling dynamic context menu creation depending
+    Event listener for handling context-aware menu creation depending
     on the selection and the lines of code present
+
+    This is built to be modular and scale better than just be a one-trick pony
     """
 
     def _args_to_vec(self, args):
@@ -56,6 +58,7 @@ class CppRefactorListener(sublime_plugin.EventListener):
 
         output = []
 
+        current_word = view.substr(view.word(view.layout_to_text(pos)))
         current_line = self._context_line(view, pos)
         while not current_line.endswith(';'):
             pos = (pos[0], pos[1] + view.line_height())
@@ -64,10 +67,30 @@ class CppRefactorListener(sublime_plugin.EventListener):
 
             current_line += self._context_line(view, pos)
 
-        for possible_command in _BaseCppCommand._cppr_registry['header']:
-            menu_commands = possible_command.get_commands(view, command, args, pos, current_line, header, source)
+        after_one = False
 
-            if menu_commands is not None:
+        detail = CppRefactorDetails(
+            view=view,
+            command=command,
+            args=args,
+            pos=pos,
+            current_file_type='header',
+            current_word=current_word,
+            current_line=current_line,
+            header=header,
+            source=source
+        )
+
+        for possible_command in _BaseCppCommand._cppr_registry['header']:
+            menu_commands = possible_command.get_commands(detail)
+
+            if menu_commands:
+
+                if after_one:
+                    output.append({ 'caption' : '-' })
+                else:
+                    after_one = True
+
                 for menu_option in menu_commands:
                     command_name, *menu_data = menu_option
 
@@ -104,7 +127,7 @@ class CppRefactorListener(sublime_plugin.EventListener):
             return
     
         #
-        # Before we do anything, let's make assert which file we're in and
+        # Before we do anything, let's assert which file we're in and
         # that we have the oposite file present and accounted for
         #
 

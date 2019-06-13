@@ -4,6 +4,8 @@
 
 using math_history = std::pair<std::string, float>;
 
+using namespace foo::bar;
+
 namespace mymath
 {
 
