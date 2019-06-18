@@ -11,6 +11,13 @@ Many IDEs out there make use their inherent understanding of you project through
 
 ![Usability](/img/header_a.jpg?raw=true)
 
+## Getter / Setter Functions
+Getters and setters are used in a plentiful sense in modern C++. For this reason, there is also the ability to right click on members and build their respective functions.
+
+Currently this does its best to identify the proper signature but may not always be what you're looking for. That said it should still speed up Sublime typing.
+
+![GetAndSet](/img/header_c.jpg?raw=true)
+
 ## A Scenario
 Let's say you have the header:
 ```cpp
@@ -52,12 +59,6 @@ And bam! You'll be moved to the source file, all the right guts and ownership wi
 ### The Catch
 Ultimately, this tool is parsing the file and doing what it can with immediate information but, as any C++ developer knows, the language has quite a few caveats so you may not get the perfect signature or ownership every time however it should still get you moving in the right direction and speed up _a lot_ of typing.
 
-## Getter / Setter Functions
-Getters and setters are used in a plentiful sense in modern C++. For this reason, there is also the ability to right click on members and build their respective functions.
-
-Currently this does its best to identify the proper signature but may not always be what you're looking for. That said it should still speed up Sublime typing.
-
-![GetAndSet](/img/header_c.jpg?raw=true)
 
 # Install
 Using Package Control [Sublime Package Manager](http://wbond.net/sublime_packages/package_control)
