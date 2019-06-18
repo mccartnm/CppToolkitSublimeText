@@ -308,8 +308,8 @@ class CppGetterSetterFunctionsCommand(_BaseCppCommand):
         r'(?:\s+)?(?P<type>.+)(?:\s)(?P<member>[^\s;]+)(?:\s+)?\;'
     )
 
-    GETTER_FORMAT = '\n{indent}{classifier}{type} {p_or_r}get{property_upper}() const{ending}'
-    SETTER_FORMAT = '\n{indent}void set{property_upper}({set_classifier}{type} {p_or_r}{property_name}){ending}'
+    GETTER_FORMAT = '\n{indent}{classifier}{type} {p_or_r}get{property_upper}() const{get_ending}'
+    SETTER_FORMAT = '\n{indent}void set{property_upper}({set_classifier}{type} {p_or_r}{property_name}){set_ending}'
 
     def get_const_types(self):
         settings = sublime.load_settings('CppToolkit.sublime-settings')
@@ -322,6 +322,7 @@ class CppGetterSetterFunctionsCommand(_BaseCppCommand):
         """
         view = detail.view
         func_priv = 'default'
+        func_priv_line = None
         func_priv_loc = (0, 0)
         this_position = cls.previous_line(view, detail.pos)
 
@@ -336,15 +337,24 @@ class CppGetterSetterFunctionsCommand(_BaseCppCommand):
 
                 # Make sure we're within the right owner
                 this_ownership = CppTokenizer.ownership_chain(view, this_position)
-                if this_position != original_ownership:
+
+                if len(original_ownership) != len(this_ownership):
+                    continue
+
+                fail = False
+                for i in range(len(this_ownership)):
+                    if original_ownership[i] != this_ownership[i]:
+                        fail = True
+                        break
+
+                if fail:
                     continue
 
                 # This should the privilege of the function within it's class
                 func_priv = priv_match.groupdict()['priv']
                 func_priv_loc = this_position
+                func_priv_line = search_line
                 break
-
-            search_line = cls.previous_line(view, this_position)
 
         match = cls.WITH_DEFAULT.match(detail.current_line)
         if match is None:
@@ -357,11 +367,17 @@ class CppGetterSetterFunctionsCommand(_BaseCppCommand):
         match_data.update({
             'current_line' : detail.current_line,
             'original_position': detail.pos,
-            'function_priv' : func_priv,
-            'func_priv_loc' : func_priv_loc
+            'func_priv' : func_priv,
+            'func_priv_loc' : func_priv_loc,
+            'func_priv_line': func_priv_line,
         })
+
+        with_imply = deepcopy(match_data)
+        with_imply.update({ 'impl' : True })
+
         return [
-            ['Generate Getter/Setter Functions', 'header_file', match_data]
+            ['Generate Getter/Setter', 'header_file', match_data],
+            ['Generate Getter/Setter (With Implementation)', 'header_file', with_imply]
         ]
 
 
@@ -398,8 +414,17 @@ class CppGetterSetterFunctionsCommand(_BaseCppCommand):
             local_data['classifier'] = 'const '
             local_data['set_classifier'] = 'const '
 
-        local_data['ending'] = ';' # TODO
-        local_data['indent'] = ' ' * 4
+        if data['func_priv'] != 'default':
+            local_data['indent'] = ' ' * (data['func_priv_line'].index(data['func_priv']) + 4)
+        else:
+            local_data['indent'] = '    '
+
+        if data.get('impl'):
+            local_data['get_ending'] = ' { return ' + member_name + '; }'
+            local_data['set_ending'] = ' { ' + member_name + ' = ' + property_name + '; }'
+        else:
+            local_data['get_ending'] = ';'
+            local_data['set_ending'] = ';'
 
         #
         # Kruft to handle the delicate matter of pointers and references

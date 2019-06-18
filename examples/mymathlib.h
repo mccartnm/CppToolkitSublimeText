@@ -29,11 +29,7 @@ class FloatCalculator
     float add(float a, float b);
     float sub(float a, float b);
 
-    class Bloo
-    {
-    public:
-        foo m_barr;
-    };
+private:
 
     std::list<math_history> m_history;
 
