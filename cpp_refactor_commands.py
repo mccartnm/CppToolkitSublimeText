@@ -65,7 +65,6 @@ class CppRefactorDetails(object):
         return self._current_file_type
     
 
-
 class _BaseCppRefactorMeta(type):
     """
     Registry class for any commands that we want to be utilized in the menus and
@@ -98,19 +97,24 @@ class _BaseCppCommand(sublime_plugin.TextCommand, metaclass=_BaseCppRefactorMeta
 
     default_open = 'source_file'
 
-    hotkey = None # __FUTURE__
+    # hotkey = None # __FUTURE__
+
+    FUNC_PRIV = re.compile(r'(\s+)?(?P<priv>.+)\:$')
 
     @classmethod
     def context_line(cls, view, pos):
         return view.substr(view.line(view.layout_to_text(pos)))
 
+
     @classmethod
     def previous_line(cls, view, pos):
         return (pos[0], pos[1] - view.line_height())
 
+
     @classmethod
     def next_line(cls, view, pos):
         return (pos[0], pos[1] + view.line_height())
+
 
     @staticmethod
     def subl_command_name(cls):
@@ -118,6 +122,7 @@ class _BaseCppCommand(sublime_plugin.TextCommand, metaclass=_BaseCppRefactorMeta
         def _snake(match):
             return match.group(1).lower() + '_' + match.group(2).lower()
         return re.sub(regex, _snake, cls.__name__.replace("Command", ''), 0)
+
 
     @classmethod
     def get_commands(cls, detail):
@@ -145,8 +150,6 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
         r'(?P<method>[^\s\(]+)((\s+)?\()+?(?P<args>[^\;]+)?'\
         r'((\s+)?\))+?(\s+)?(?P<addendum>[^\;]+)?'
     )
-
-    FUNC_PRIV = re.compile(r'(\s+)?(?P<priv>.+)\:$')
 
     DECLARE_FORMAT = "{type}{ownership}{method}({source_arguments}){classifiers}"
 
@@ -211,6 +214,7 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
         if output:
             output += '::'
         return output
+
 
     def run(self, edit, **data):
         """
@@ -287,6 +291,140 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
         else:
             full_boddy = decl + '\n{\n}\n';
             sublime.set_clipboard(full_boddy)
+
+
+class CppGetterSetterFunctionsCommand(_BaseCppCommand):
+    """
+    Quick way of building the setter and getter for a given member
+    """
+    flags = _BaseCppCommand.IN_HEADER # | _BaseCppCommand.IN_SOURCE
+
+    WITH_DEFAULT = re.compile(
+        r'(?:\s+)?(?P<type>.+)(?:\s)(?P<member>[^\s;]+)'\
+        r'(?:\s+)?(\=)(\s+)?(?P<default>.+)?\;'
+    )
+
+    NO_DEFAULT = re.compile(
+        r'(?:\s+)?(?P<type>.+)(?:\s)(?P<member>[^\s;]+)(?:\s+)?\;'
+    )
+
+    GETTER_FORMAT = '\n{indent}{classifier}{type} {p_or_r}get{property_upper}() const{ending}'
+    SETTER_FORMAT = '\n{indent}void set{property_upper}({set_classifier}{type} {p_or_r}{property_name}){ending}'
+
+    def get_const_types(self):
+        settings = sublime.load_settings('CppToolkit.sublime-settings')
+        return list(settings.get('non_const_types', ['float', 'double', 'int']))
+
+    @classmethod
+    def get_commands(cls, detail):
+        """
+        Getting the commands...
+        """
+        view = detail.view
+        func_priv = 'default'
+        func_priv_loc = (0, 0)
+        this_position = cls.previous_line(view, detail.pos)
+
+        original_ownership = CppTokenizer.ownership_chain(view, detail.pos)
+
+        while this_position[1] > 0:
+            search_line = cls.context_line(view, this_position)
+            this_position = (this_position[0], this_position[1] - view.line_height())
+            priv_match = cls.FUNC_PRIV.match(search_line)
+
+            if priv_match and func_priv == 'default':
+
+                # Make sure we're within the right owner
+                this_ownership = CppTokenizer.ownership_chain(view, this_position)
+                if this_position != original_ownership:
+                    continue
+
+                # This should the privilege of the function within it's class
+                func_priv = priv_match.groupdict()['priv']
+                func_priv_loc = this_position
+                break
+
+            search_line = cls.previous_line(view, this_position)
+
+        match = cls.WITH_DEFAULT.match(detail.current_line)
+        if match is None:
+            match = cls.NO_DEFAULT.match(detail.current_line)
+
+        if match is None:
+            return [] # Not a member we can devine
+
+        match_data = match.groupdict()
+        match_data.update({
+            'current_line' : detail.current_line,
+            'original_position': detail.pos,
+            'function_priv' : func_priv,
+            'func_priv_loc' : func_priv_loc
+        })
+        return [
+            ['Generate Getter/Setter Functions', 'header_file', match_data]
+        ]
+
+
+    def run(self, edit, **data):
+        """
+        Create the functions and then build them into the header
+        """
+
+        member_name = data['member']
+        if not member_name:
+            return # Nothing to do
+
+        type_ = data['type']
+        if member_name[0] in ('&', '*'):
+            type_ += member_name[0]
+            member_name = member_name[1:]
+
+        property_name = member_name
+        if member_name.startswith('m_'):
+            property_name = member_name[2:]
+
+        local_data = data.copy()
+
+        local_data['member'] = member_name
+        local_data['property_name'] = property_name
+        local_data['property_upper'] = property_name[0].upper() + property_name[1:]
+
+        # Stacked basic types don't make no sense to be const
+        if type_ in self.get_const_types():
+            local_data['classifier'] = ''
+            local_data['set_classifier'] = ''
+            local_data['p_or_r'] = ''
+        else:
+            local_data['classifier'] = 'const '
+            local_data['set_classifier'] = 'const '
+
+        local_data['ending'] = ';' # TODO
+        local_data['indent'] = ' ' * 4
+
+        #
+        # Kruft to handle the delicate matter of pointers and references
+        # to make sure they are consistent
+        #
+        if local_data.get('p_or_r') is None:
+            if type_[-1] in ('&', '*'):
+                local_data['p_or_r'] = type_[-1]
+                type_ = type_[:-1]
+                local_data['set_classifier'] = ''
+            else:
+                local_data['p_or_r'] = '&'
+
+        local_data['type'] = type_
+        getter = self.GETTER_FORMAT.format(**local_data)
+        setter = self.SETTER_FORMAT.format(**local_data)
+
+        loc = data['func_priv_loc']
+        if loc == [0, 0]:
+            loc = self.previous_line(self.view, data['original_position'])
+        else:
+            loc = self.next_line(self.view, loc)
+        point = self.view.layout_to_text(loc)
+
+        self.view.insert(edit, point, getter + setter)
 
 
 # ----------------------------------------------------------------------------

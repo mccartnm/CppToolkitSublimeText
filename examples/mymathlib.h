@@ -9,12 +9,17 @@ using namespace foo::bar;
 namespace mymath
 {
 
+class Foo()
+{
+public:
+    float boo();
+}
+
 /*
     Fun calculator class for example purposes
 */
 class FloatCalculator
 {
-public:
 
     FloatCalculator();
     ~FloatCalculator();
@@ -24,12 +29,15 @@ public:
     float add(float a, float b);
     float sub(float a, float b);
 
-    // Example for converting camel to snake
-    const std::list<math_history> &getHistory() const;
-
-private:
+    class Bloo
+    {
+    public:
+        foo m_barr;
+    };
 
     std::list<math_history> m_history;
+
+    float m_secretValue;
 
 };
 

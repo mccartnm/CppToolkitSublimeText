@@ -9,7 +9,7 @@ import sublime
 import sublime_plugin
 
 from .lib import utils
-from .cpp_refactor_commands import _BaseCppCommand, CppRefactorDetails
+from .cpp_refactor_commands import CppTokenizer, _BaseCppCommand, CppRefactorDetails
 
 __author__ = 'Michael McCartney'
 __version__ = '0.0.2'
@@ -47,6 +47,34 @@ class CppRefactorListener(sublime_plugin.EventListener):
     def _next_line(self, view, pos):
         return (pos[0], pos[1] + view.line_height())
 
+    def _current_line(self, view, pos):
+        """
+        Find the current line data. This is important because we have
+        to handle search back until we find a proper delimiter
+        :return: str
+        """
+        og_pos = pos[:]
+        current_line = self._context_line(view, pos)
+        while not current_line.endswith(';'):
+            pos = (pos[0], pos[1] + view.line_height())
+            if pos[1] > view.layout_extent()[1]:
+                break
+            current_line += self._context_line(view, pos)
+
+        og_pos = self._previous_line(view, og_pos)
+        done = False
+        while og_pos[1] > 0 and not done:
+            # Back up until we find the right item
+            rev_line = self._context_line(view, og_pos)[::-1]
+            for char in rev_line:
+                if char in (' ', '\n', '\t') or (char not in CppTokenizer.DELIMITS):
+                    current_line = char + current_line
+                else:
+                    # We've hit a delimit!
+                    done = True
+                    break
+            og_pos = self._previous_line(view, og_pos)
+        return current_line.strip()
 
     def _build_header_menu(self, view, command, args, pos, header, source):
         """
@@ -59,14 +87,8 @@ class CppRefactorListener(sublime_plugin.EventListener):
         output = []
 
         current_word = view.substr(view.word(view.layout_to_text(pos)))
-        current_line = self._context_line(view, pos)
-        while not current_line.endswith(';'):
-            pos = (pos[0], pos[1] + view.line_height())
-            if pos[1] > view.layout_extent()[1]:
-                break
 
-            current_line += self._context_line(view, pos)
-
+        current_line = self._current_line(view, pos)
         after_one = False
 
         detail = CppRefactorDetails(

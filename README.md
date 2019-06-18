@@ -52,6 +52,9 @@ And bam! You'll be moved to the source file, all the right guts and ownership wi
 ### The Catch
 Ultimately, this tool is parsing the file and doing what it can with immediate information but, as any C++ developer knows, the language has quite a few caveats so you may not get the perfect signature or ownership every time however it should still get you moving in the right direction and speed up _a lot_ of typing.
 
+## Getter / Setter Functions
+Docs coming soon...
+
 # Install
 Using Package Control [Sublime Package Manager](http://wbond.net/sublime_packages/package_control)
 
@@ -69,3 +72,6 @@ There are many things to do for this plugin that I'm hoping to tick away at in m
 3. Switch statement breakout (based on some kind of classifier)
 4. Smart inject based on other declarations in the source rather than always at the end
 5. Reverse implement to go from source to header under a given privilege
+6. Apply changes to function signatures in both header and source
+7. ~~Getter/Setter functions of members~~ (done)
+8. Have the commands work in both source and header, just using the parser to understand what commands can be used
