@@ -57,7 +57,7 @@ Getters and setters are used in a plentiful sense in modern C++. For this reason
 
 Currently this does its best to identify the proper signature but may not always be what you're looking for. That said it should still speed up Sublime typing.
 
-![GetAndSet](/img/header_b.jpg?raw=true)
+![GetAndSet](/img/header_c.jpg?raw=true)
 
 # Install
 Using Package Control [Sublime Package Manager](http://wbond.net/sublime_packages/package_control)
