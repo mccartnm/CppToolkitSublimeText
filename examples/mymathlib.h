@@ -9,27 +9,41 @@ using namespace foo::bar;
 namespace mymath
 {
 
-class Foo()
+class BasicCalculator()
 {
 public:
-    float boo();
+    virtual std::string type() const = 0; // Test for virtual and const
 }
 
 /*
-    Fun calculator class for example purposes
+    Fun calculator class for example purposes and
+    different commenting/variable structures
 */
-class FloatCalculator
+class FloatCalculator : public BasicCalculator
 {
 
     FloatCalculator();
     ~FloatCalculator();
 
-    float mult(float a, float b = 0);
-    float div(float a, float b);
+    float mult(float a, float b = 0); /* multiline at eol */
+
+    float div(float a, float b); // An eol comment
+
     float add(float a, float b);
+
+    /*
+        Multiline before a function
+    */
     float sub(float a, float b);
 
+    // Line comment before a function
+    float mean(std::vector<float> values);
+
+    std::string type() const override;
+
 private:
+    const std::list<math_history> &getHistory() const;
+    void setHistory(const std::list<math_history> &history);
 
     std::list<math_history> m_history;
 

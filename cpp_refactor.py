@@ -74,13 +74,36 @@ class CppRefactorListener(sublime_plugin.EventListener):
                 break
 
             rev_line = prev_line[::-1]
+
+            # Check if the line ends in a multiline comment (it's backwards)
+            if rev_line.startswith('/*'):
+                done = True
+                break
+
+            create_line = ''
+            should_prepend = True
+            in_quotes = False
+
             for i, char in enumerate(rev_line):
+
+                if char == '"':
+                    in_quotes ^= 1 # Invert
+
+                if (not in_quotes) and (char == '/') and (i + 1 < len(rev_line) and rev_line[i+1] == '/'):
+                    should_prepend = False # This is a line comment, no coming back from this.
+                    done = True
+                    break
+
                 if char in (' ', '\n', '\t') or (char not in CppTokenizer.DELIMITS):
-                    current_line = char + current_line
+                    create_line = char + create_line
                 else:
                     # We've hit a delimit!
                     done = True
                     break
+
+            if should_prepend:
+                current_line = create_line + current_line
+
             og_pos = self._previous_line(view, og_pos)
 
         return current_line.strip()
