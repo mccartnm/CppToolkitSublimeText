@@ -2,7 +2,7 @@ Cpp Toolkit
 ===========
 A collection of utilities for managing C++ code implementation.
 
-> Disclamer: Sublime is not a fully featured C++ IDE and this plugin doesn't try to make it one. It simply tries to speed up your usual work
+> Disclaimer: Sublime is not a fully featured C++ IDE and this plugin doesn't try to make it one. It simply tries to speed up your usual work
 
 # Capabilities
 
@@ -10,6 +10,13 @@ A collection of utilities for managing C++ code implementation.
 Many IDEs out there make use their inherent understanding of you project through syntax and preprocessing to present perks like being able to automatically declare methods from the header within the source. This save the developer _loads_ of time.
 
 ![Usability](/img/header_a.jpg?raw=true)
+
+## Getter / Setter Functions
+Getters and setters are used in a plentiful sense in modern C++. For this reason, there is also the ability to right click on members and build their respective functions.
+
+Currently this does its best to identify the proper signature but may not always be what you're looking for. That said it should still speed up Sublime typing.
+
+![GetAndSet](/img/header_c.jpg?raw=true)
 
 ## A Scenario
 Let's say you have the header:
@@ -47,10 +54,11 @@ With `Cpp Toolkit`, the workflow is:
 
 And bam! You'll be moved to the source file, all the right guts and ownership will be filled in, no pesky non-const classifiers or default values, and your cursor will be right where you need it to start typing the function body!
 
-> Note: At the moment, this assumes, just like the `Alt + O` shortcut, that the header and implentation are next to each other in the filesystem. In the future I may add ways to declare an implementation root or location or some such.
+> Note: At the moment, this assumes, just like the `Alt + O` shortcut, that the header and implementation are next to each other in the filesystem. In the future I may add ways to declare an implementation root or location or some such.
 
 ### The Catch
 Ultimately, this tool is parsing the file and doing what it can with immediate information but, as any C++ developer knows, the language has quite a few caveats so you may not get the perfect signature or ownership every time however it should still get you moving in the right direction and speed up _a lot_ of typing.
+
 
 # Install
 Using Package Control [Sublime Package Manager](http://wbond.net/sublime_packages/package_control)
@@ -64,8 +72,12 @@ To install use these commands (once it's up on the Sublime Package Repository).
 # Roadmap
 There are many things to do for this plugin that I'm hoping to tick away at in my spare time
 
-1. Basic preprocess for things like `#ifdef 0 ... #endif` clauses
-2. Camel case/Snake case conversion when needed
+1. _Basic_ preprocess for things like `#ifdef 0 ... #endif` clauses
+2. ~~Camel case/Snake case conversion when needed~~ This is already in the sweet [CaseConversion](https://github.com/jdavisclark/CaseConversion) plugin
 3. Switch statement breakout (based on some kind of classifier)
 4. Smart inject based on other declarations in the source rather than always at the end
 5. Reverse implement to go from source to header under a given privilege
+6. Apply changes to function signatures in both header and source
+7. ~~Getter/Setter functions of members~~ (done)
+8. Have the commands work in both source and header, just using the parser to understand what commands can be used
+9. Hotkeys for select functions

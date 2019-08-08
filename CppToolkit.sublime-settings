@@ -4,4 +4,22 @@
     // ----------------- [WARNING] -----------------
     // Always make changes in the user settings
     // ----------------- [WARNING] -----------------
+
+    "source_file_types" : [
+        "cpp",
+    ],
+
+    "header_file_types" : [
+        "h",
+        "hpp"
+    ],
+
+    // The non const types are for the getter/setter function
+    // creation to understand when types to pased without const
+    // when on the stack
+    // This is a pretty poor list and needs some updating
+    "non_const_types" : [
+        "float", "int", "double", "int8_t", "int16_t", "int32_t", "int64_t",
+        "size_t", "uchar", "uint", "uint8"
+    ]
 }

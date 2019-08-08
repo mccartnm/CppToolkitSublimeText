@@ -9,10 +9,10 @@ import sublime
 import sublime_plugin
 
 from .lib import utils
-from .cpp_refactor_commands import CppTokenizer, _BaseCppCommand
+from .cpp_refactor_commands import CppTokenizer, _BaseCppCommand, CppRefactorDetails
 
 __author__ = 'Michael McCartney'
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 
 
 def plugin_loaded():
@@ -28,8 +28,10 @@ def plugin_unloaded():
 
 class CppRefactorListener(sublime_plugin.EventListener):
     """
-    Event listener for handling dynamic context menu creation depending
+    Event listener for handling context-aware menu creation depending
     on the selection and the lines of code present
+
+    This is built to be modular and scale better than just be a one-trick pony
     """
 
     def _args_to_vec(self, args):
@@ -45,29 +47,84 @@ class CppRefactorListener(sublime_plugin.EventListener):
     def _next_line(self, view, pos):
         return (pos[0], pos[1] + view.line_height())
 
+    def _current_line(self, view, pos):
+        """
+        Find the current line data. This is important because we have
+        to handle search back until we find a proper delimiter
+        :return: str
+        """
+        og_pos = pos[:]
+        current_line = self._context_line(view, pos)
+
+        while not current_line.endswith(';'):
+            pos = (pos[0], pos[1] + view.line_height())
+            if pos[1] > view.layout_extent()[1]:
+                break
+            current_line += self._context_line(view, pos)
+
+        og_pos = self._previous_line(view, og_pos)
+        done = False
+        while og_pos[1] > 0 and not done:
+            # Back up until we find the right item
+            prev_line = self._context_line(view, og_pos)
+
+            # Check if the previous line is a comment
+            if prev_line.strip().startswith('//'):
+                done = True
+                break
+
+            rev_line = prev_line[::-1]
+            for i, char in enumerate(rev_line):
+                if char in (' ', '\n', '\t') or (char not in CppTokenizer.DELIMITS):
+                    current_line = char + current_line
+                else:
+                    # We've hit a delimit!
+                    done = True
+                    break
+            og_pos = self._previous_line(view, og_pos)
+
+        return current_line.strip()
 
     def _build_header_menu(self, view, command, args, pos, header, source):
         """
         Using the _BaseCppCommand registry of header-capable commands, we build a dynamic
         context menu that can act on the text we're setting out on.
+        :param pos: tuple(float, float) of the position we're in
+        :param header: Path to the header file
+        :param source: Path to the source file
         :return: list
         """
         original_position = pos[:]
 
         output = []
 
-        current_line = self._context_line(view, pos)
-        while not current_line.endswith(';'):
-            pos = (pos[0], pos[1] + view.line_height())
-            if pos[1] > view.layout_extent()[1]:
-                break
+        current_word = view.substr(view.word(view.layout_to_text(pos)))
 
-            current_line += self._context_line(view, pos)
+        current_line = self._current_line(view, pos)
+        after_one = False
+
+        detail = CppRefactorDetails(
+            view=view,
+            command=command,
+            args=args,
+            pos=pos,
+            current_file_type='header_file',
+            current_word=current_word,
+            current_line=current_line,
+            header=header,
+            source=source
+        )
 
         for possible_command in _BaseCppCommand._cppr_registry['header']:
-            menu_commands = possible_command.get_commands(view, command, args, pos, current_line, header, source)
+            menu_commands = possible_command.get_commands(detail)
 
-            if menu_commands is not None:
+            if menu_commands:
+
+                if after_one:
+                    output.append({ 'caption' : '-' })
+                else:
+                    after_one = True
+
                 for menu_option in menu_commands:
                     command_name, *menu_data = menu_option
 
@@ -95,16 +152,35 @@ class CppRefactorListener(sublime_plugin.EventListener):
 
 
     def on_post_text_command(self, view, command, args):
+        """
+        When finished with a text command, we want to erase the menu
+        we created to assert we always start fresh
+        :param view: sublime.View
+        :param command: str of sublime command
+        :param args: additional args passed by sublime
+        :return: None
+        """
         if command == "context_menu":
             utils._write_menu([])
 
 
     def on_text_command(self, view, command, args):
+        """
+        Text commands are handled when interacting with a view.
+
+        This will attempt to locate any options currently available
+        based on the users context and build a context menu accordingly.
+
+        :param view: sublime.View
+        :param command: str of sublime command
+        :param args: additional args passed by sublime
+        :return: None
+        """
         if command != "context_menu":
             return
     
         #
-        # Before we do anything, let's make assert which file we're in and
+        # Before we do anything, let's assert which file we're in and
         # that we have the oposite file present and accounted for
         #
 
@@ -115,27 +191,37 @@ class CppRefactorListener(sublime_plugin.EventListener):
         header_or_source = None
         other_file = None
 
-        base, filetype = os.path.splitext(current_file)
-        if filetype in ('.h', '.hpp'):
-            header_or_source = 'header'
-            if os.path.isfile(base + '.cpp'):
-                other_file = base + '.cpp'
+        settings = sublime.load_settings('CppToolkit.sublime-settings')
 
-        elif filetype in ('.cpp',):
+        base, filetype = os.path.splitext(current_file)
+
+        filetype = filetype.replace('.', '', 1)
+
+        header_types = settings.get("header_file_types", ["h", "hpp"])
+        source_types = settings.get("source_file_types", ["cpp"])
+
+        if filetype in header_types:
+            header_or_source = 'header'
+            for source_type in source_types:
+                if os.path.isfile(base + '.' + source_type):
+                    other_file = base + '.' + source_type
+                    break
+
+        elif filetype in source_types:
             header_or_source = 'source'
 
-            if os.path.isfile(base + '.h'):
-                other_file = base + '.h'
-            elif os.path.isfile(base + '.hpp'):
-                other_file = base + '.hpp'
+            for header_type in header_types:
+                if os.path.isfile(base + '.' + header_type):
+                    other_file = base + '.' + header_type
+                    break
 
         if header_or_source is None or other_file is None:
             return # This isn't a C++ file
 
         #
         # The process of building our menu is most of the battle because
-        # we need to do all of the searching and data mining before developing
-        # a useful
+        # we need to do all of the searching and data mining before actually
+        # giving the user the menu. This means we need to be quick and quiet
         #
 
         context_menu = []
