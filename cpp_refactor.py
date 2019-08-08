@@ -55,6 +55,7 @@ class CppRefactorListener(sublime_plugin.EventListener):
         """
         og_pos = pos[:]
         current_line = self._context_line(view, pos)
+
         while not current_line.endswith(';'):
             pos = (pos[0], pos[1] + view.line_height())
             if pos[1] > view.layout_extent()[1]:
@@ -65,8 +66,15 @@ class CppRefactorListener(sublime_plugin.EventListener):
         done = False
         while og_pos[1] > 0 and not done:
             # Back up until we find the right item
-            rev_line = self._context_line(view, og_pos)[::-1]
-            for char in rev_line:
+            prev_line = self._context_line(view, og_pos)
+
+            # Check if the previous line is a comment
+            if prev_line.strip().startswith('//'):
+                done = True
+                break
+
+            rev_line = prev_line[::-1]
+            for i, char in enumerate(rev_line):
                 if char in (' ', '\n', '\t') or (char not in CppTokenizer.DELIMITS):
                     current_line = char + current_line
                 else:
@@ -74,12 +82,16 @@ class CppRefactorListener(sublime_plugin.EventListener):
                     done = True
                     break
             og_pos = self._previous_line(view, og_pos)
+
         return current_line.strip()
 
     def _build_header_menu(self, view, command, args, pos, header, source):
         """
         Using the _BaseCppCommand registry of header-capable commands, we build a dynamic
         context menu that can act on the text we're setting out on.
+        :param pos: tuple(float, float) of the position we're in
+        :param header: Path to the header file
+        :param source: Path to the source file
         :return: list
         """
         original_position = pos[:]
@@ -140,11 +152,30 @@ class CppRefactorListener(sublime_plugin.EventListener):
 
 
     def on_post_text_command(self, view, command, args):
+        """
+        When finished with a text command, we want to erase the menu
+        we created to assert we always start fresh
+        :param view: sublime.View
+        :param command: str of sublime command
+        :param args: additional args passed by sublime
+        :return: None
+        """
         if command == "context_menu":
             utils._write_menu([])
 
 
     def on_text_command(self, view, command, args):
+        """
+        Text commands are handled when interacting with a view.
+
+        This will attempt to locate any options currently available
+        based on the users context and build a context menu accordingly.
+
+        :param view: sublime.View
+        :param command: str of sublime command
+        :param args: additional args passed by sublime
+        :return: None
+        """
         if command != "context_menu":
             return
     
@@ -189,8 +220,8 @@ class CppRefactorListener(sublime_plugin.EventListener):
 
         #
         # The process of building our menu is most of the battle because
-        # we need to do all of the searching and data mining before developing
-        # a useful
+        # we need to do all of the searching and data mining before actually
+        # giving the user the menu. This means we need to be quick and quiet
         #
 
         context_menu = []

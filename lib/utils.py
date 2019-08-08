@@ -201,10 +201,12 @@ class CppTokenizer(object):
                     chain.append(active_proc)
 
                 active_proc = [token, None]
+                inner_tok = None
                 while True:
                     #
                     # Find the proc name
                     #
+                    prev_tok = inner_tok
                     inner_tok = izer.next()
                     if inner_tok is None or inner_tok.endswith(';'):
                         #
@@ -238,6 +240,12 @@ class CppTokenizer(object):
                                 # take place
                                 break
                         break
+
+                    #
+                    # Edge case for 'final' decl
+                    #
+                    if inner_tok == 'final':
+                        inner_tok = prev_tok
 
                     active_proc = [token, inner_tok]
 
