@@ -9,7 +9,8 @@ import sublime
 import sublime_plugin
 
 from .lib import utils
-from .cpp_refactor_commands import CppTokenizer, _BaseCppCommand, CppRefactorDetails
+from .cpp_refactor_commands import CppTokenizer, _BaseCppCommand
+from .cpp_refactor_commands import CppRefactorDetails, FunctionState
 
 __author__ = 'Michael McCartney'
 __version__ = '0.0.2'
@@ -53,14 +54,9 @@ class CppRefactorListener(sublime_plugin.EventListener):
         to handle search back until we find a proper delimiter
         :return: str
         """
+
         og_pos = pos[:]
         current_line = self._context_line(view, pos)
-
-        while not current_line.endswith(';'):
-            pos = (pos[0], pos[1] + view.line_height())
-            if pos[1] > view.layout_extent()[1]:
-                break
-            current_line += self._context_line(view, pos)
 
         og_pos = self._previous_line(view, og_pos)
         done = False
@@ -77,6 +73,7 @@ class CppRefactorListener(sublime_plugin.EventListener):
 
             # Check if the line ends in a multiline comment (it's backwards)
             if rev_line.startswith('/*'):
+                og_pos = self._next_line(view, og_pos) # Too far
                 done = True
                 break
 
@@ -106,7 +103,8 @@ class CppRefactorListener(sublime_plugin.EventListener):
 
             og_pos = self._previous_line(view, og_pos)
 
-        return current_line.strip()
+        fs = FunctionState.from_position(view, og_pos)
+        return fs.found()
 
     def _build_header_menu(self, view, command, args, pos, header, source):
         """

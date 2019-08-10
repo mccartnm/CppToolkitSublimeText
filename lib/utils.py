@@ -3,13 +3,15 @@
 import re
 import os
 import json
-import sublime
+from contextlib import contextmanager
 
 def _cache_path():
+    import sublime
     return os.path.join(sublime.cache_path(), "CppRefactor")
 
 
 def _write_menu(menu):
+    import sublime
     menu_path = os.path.join(_cache_path(), "Context.sublime-menu")
     with open(menu_path, "w+") as cache:
         cache.write(json.dumps(menu, cache))
@@ -19,18 +21,35 @@ class CppTokenizer(object):
     Utility for building tokens of C++ files. This is by no means complete
     but forgoes a lot of the nitty gritty to be lean and fast 
     """
-    DELIMITS = ( '*', '=', '{', '}', '\'', '\"', '(', ')', ';', ':', ' ', '\n', '\t' )
+    DELIMITS = ( '*', '=', '<', '>', '{', '}', '\'', '\"', '(', ')', ';', ':', ' ', '\n', '\t' )
 
     def __init__(self, view, start=0, end=None, use_line=None):
         self._view = view
         self._current = start
         if end:
             self._end = end - self._view.line_height()
-        else:
+        elif self._view:
             self._end = self._view.layout_extent()[1]
         self._use_line = use_line
         self._current_tokens = None
+        self._skip_whitespace = True
 
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        d = self._next()
+        if d is not None:
+            return d
+        else:
+            raise StopIteration
+
+    @contextmanager
+    def include_white_space(self):
+        self._skip_whitespace = False
+        yield
+        self._skip_whitespace = True
 
     def _context_line(self, pos: (int, float)):
         """
@@ -71,7 +90,10 @@ class CppTokenizer(object):
                 if current:
                     tokens.append(current)
                 current = ''
-                if char not in (' ', '\n', '\t'):
+                if self._skip_whitespace:
+                    if char not in ('\n', '\t'):
+                        tokens.append(char)
+                else:
                     tokens.append(char)
             previous = char
 
@@ -81,17 +103,21 @@ class CppTokenizer(object):
         return tokens
 
 
-    def next(self, **kwargs):
+    def _next(self, **kwargs):
         """
         Rather than host the whole buffer in one shot, we just get a
         line at a time and keep requesting it until we're done
         """
-
         # Grab a token list
         while (self._current_tokens in (None, [])):
 
+            if hasattr(self, '_no_more'):
+                return None
+
             if self._use_line is not None:
                 self._current_tokens = self._get_tokens(self._use_line)
+                self._use_line = None # nomnom!
+                self._no_more = True
             else:
                 if self._current > self._end:
                     # We've made it where we wanted to go
@@ -110,28 +136,28 @@ class CppTokenizer(object):
         if kwargs.get('in_comment'):
             return current_token # comments don't validate
 
-        if current_token in ('', ' '):
-            return self.next() # Keep going
+        if current_token in ('', ' ') and self._skip_whitespace:
+            return self._next() # Keep going
 
         # Basic Validation
         if current_token.startswith('//'):
             # Line comment, skip the rest of the line
             self.skip_line()
-            return self.next()
+            return self._next()
 
         if current_token.startswith('/*'):
             # We have a inner comment, just
             # spin until we're out of tokens or
             # we hit the other side of the comment
             while True:
-                tok = self.next(in_comment=True)
+                tok = self._next(in_comment=True)
                 if tok is None:
                     return None
 
                 if tok.endswith('*/'):
                     # We've hit the end of the comment so whatever comes
                     # next should be the right bit
-                    return self.next()
+                    return self._next()
 
         return current_token
 
@@ -151,7 +177,7 @@ class CppTokenizer(object):
 
     def spin_until(self, char):
         while True:
-            token = self.next()
+            token = self._next()
             if token is None:
                 return
 
@@ -161,7 +187,7 @@ class CppTokenizer(object):
     def spin_scope(self):
         scope_count = 0
         while True:
-            token = self.next()
+            token = self._next()
             if token is None:
                 return
 
@@ -190,7 +216,7 @@ class CppTokenizer(object):
         token = None
         while True:
             previous = token
-            token = izer.next()
+            token = izer._next()
             if token is None:
                 # Nothing left
                 break
@@ -207,7 +233,7 @@ class CppTokenizer(object):
                     # Find the proc name
                     #
                     prev_tok = inner_tok
-                    inner_tok = izer.next()
+                    inner_tok = izer._next()
                     if inner_tok is None or inner_tok.endswith(';'):
                         #
                         # We've hit the EOF or a forward declaration,
@@ -228,7 +254,7 @@ class CppTokenizer(object):
                         # opener or a terminator
                         #
                         while True:
-                            lower_tok = izer.next()
+                            lower_tok = izer._next()
                             if lower_tok is None:
                                 active_proc[1] = None
                                 failed = True
@@ -286,7 +312,7 @@ class CppTokenizer(object):
         scope_count = 0
 
         while True:
-            token = izer.next()
+            token = izer._next()
             if token is None:
                 break # Nothing left
 
@@ -296,7 +322,7 @@ class CppTokenizer(object):
                 # right name
                 #
                 while True:
-                    inner_tok = izer.next()
+                    inner_tok = izer._next()
                     if inner_tok is None or inner_tok.endswith(';'):
                         found_proc = False
                         break # Not the right one

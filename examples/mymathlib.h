@@ -41,7 +41,18 @@ class FloatCalculator : public BasicCalculator
 
     std::string type() const override;
 
+    // Test that we can move the impl to the source
+    static std::list<foo> clearHistory() const {
+        m_history.clear();
+    }
+
+    virtual foo<bar<baz, std::function<void(const std::string &)>>>
+    my_foo() const;
+
 private:
+    float getSecretValue() const { return m_secretValue; }
+    void setSecretValue(float secretValue) { m_secretValue = secretValue; }
+
     const std::list<math_history> &getHistory() const;
     void setHistory(const std::list<math_history> &history);
 

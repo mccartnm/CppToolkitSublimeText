@@ -7,7 +7,7 @@ A collection of utilities for managing C++ code implementation.
 # Capabilities
 
 ## Auto Implement
-Many IDEs out there make use their inherent understanding of you project through syntax and preprocessing to present perks like being able to automatically declare methods from the header within the source. This save the developer _loads_ of time.
+Many IDEs out there make use their inherent understanding of you project through syntax and preprocessing to present perks like being able to automatically declare methods from the header within the source. This saves the developer _loads_ of time.
 
 ![Usability](/img/header_a.jpg?raw=true)
 
@@ -36,7 +36,7 @@ public:
 And now you want to move that to your source. Currently in Sublime you have a limited set of options. Until this plugin I would do the following:
 
 1. Move my cursor to the line and hit `Ctrl + C` to copy the whole line
-    * If the definition was multiple lines, I would use `Ctrl + L` enough time to get it all or use my mouse
+    * If the definition was multiple lines, I would use `Ctrl + L` enough times to get it all or use my mouse
 2. Swap to the source with `Alt + O`
 3. Move my cursor to where I could declare the method
 4. Paste in the header code via `Ctrl + V`
