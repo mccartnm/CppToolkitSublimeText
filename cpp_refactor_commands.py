@@ -11,95 +11,43 @@ import threading
 import sublime_plugin
 
 from copy import deepcopy
-from .lib.utils import CppTokenizer
-
-class CppRefactorDetails(object):
-    """
-    Class handling the large amount of information surrouding our context aware
-    commands. This is passed to the get_commands(...) function of the concrete
-    _BaseCppCommand(s)
-    """
-    def __init__(self, **kwargs):
-        self._view = kwargs.get('view')
-        self._command = kwargs.get('command')
-        self._args = kwargs.get('args')
-        self._pos = kwargs.get('pos')
-        self._current_word = kwargs.get('current_word')
-        self._current_line = kwargs.get('current_line')
-        self._header = kwargs.get('header')
-        self._source = kwargs.get('source')
-        self._current_file_type = kwargs.get('current_file_type')
-
-    @property
-    def view(self):
-        return self._view
-
-    @property
-    def command(self):
-        return self._command
-
-    @property
-    def args(self):
-        return self._args
-
-    @property
-    def pos(self):
-        return self._pos
-
-    @property
-    def current_word(self):
-        return self._current_word
-
-    @property
-    def current_line(self):
-        return self._current_line
-
-    @property
-    def header(self):
-        return self._header
-
-    @property
-    def source(self):
-        return self._source
-
-    @property
-    def current_file_type(self):
-        return self._current_file_type
-    
-
-class _BaseCppRefactorMeta(type):
-    """
-    Registry class for any commands that we want to be utilized in the menus and
-    hotky actions.
-    """
-    def __init__(cls, name, bases, dct):
-        """
-        Construct the class
-        """
-        if not hasattr(cls, '_cppr_registry'):
-            cls._cppr_registry = {
-                'source' : [],
-                'header' : []
-            }
-        else:
-            if cls.flags & _BaseCppCommand.IN_HEADER:
-                cls._cppr_registry['header'].append(cls)
-            if cls.flags & _BaseCppCommand.IN_SOURCE:
-                cls._cppr_registry['source'].append(cls)
-
+from .lib.utils import CppTokenizer, CppRefactorDetails
+from .lib.utils import _BaseCppRefactorMeta, FunctionState 
 
 class _BaseCppCommand(sublime_plugin.TextCommand, metaclass=_BaseCppRefactorMeta):
     """
-    Root command that all cpp children are registered under to build the proper
-    menu and items
+    Root class that all context aware commands are registered under to build
+    the proper menu and items based on "where" the user is.
+
+    ..code::python
+        class MyCommand(_BaseCppCommand):
+
+            # Bitwise flags to tell CppToolkit when this command should
+            # be tested for commands to run.
+            flags = _BaseCppCommand.IN_HEADER | _BaseCppCommand.IN_SOURCE
+
+            @classmethod
+            def get_commands(cls, detail):
+                # .. Overload here to return a list of commands in the format of:
+                return [ [
+                    '<unique_id>',
+                    '<verbose_name>',
+                    'source_file|header_file',
+                    dict(command_information)
+                ], ... ]
+
+            def run(self, edit, **data):
+                # .. Oveload to process command. data is the
+                # dict(command_information) above.
+
+    ..note::
+
+        The .get_commands() is run on any right click that matches the ``flags``
+        so be careful when introducing any heavy logic.
     """
-    IN_HEADER = 0x0000001
-    IN_SOURCE = 0x0000010
     flags = 0
 
     default_open = 'source_file'
-
-    # hotkey = None # __FUTURE__
 
     FUNC_PRIV = re.compile(r'(\s+)?(?P<priv>.+)\:$')
 
@@ -130,266 +78,39 @@ class _BaseCppCommand(sublime_plugin.TextCommand, metaclass=_BaseCppRefactorMeta
     def get_commands(cls, detail):
         pass
 
-class FunctionState(object):
-    """
-    Utility object for handling the building of our functions
-    for various state control
-    """
-
-    class Container:
-
-        opposites = {
-            '{' : '}',
-            '[' : ']',
-            '<' : '>',
-            '(' : ')'
-        }
-
-        def __init__(self):
-            self.char = None
-            self.count = 0
-
-        @property
-        def valid(self):
-            return self.char is not None
-
-        def is_close(self, other):
-            return self.opposites[self.char] == other
-
-
-    # -- Lookup States
-    STATIC_OR_VIRTUAL = 0x0000001
-    IS_CONST          = 0x0000010
-    TYPE              = 0x0000100
-    NAME              = 0x0001000
-    ARGS              = 0x0010000
-    ADDENDUM          = 0x0100000
-    IMPL              = 0x1000000
-
-    def __init__(self):
-        self._static_or_virtual = None
-        self._is_const_result = False
-        self._type = []
-        self._type_and_name = []
-        self._args = []
-        self._addendum = None
-        self._impl = None
-
-        self._valid = False
-        self._container = self.Container()
-
-        self._lookup_state = self.STATIC_OR_VIRTUAL
-        self._complete_string = ''
-
-
-    @property
-    def valid(self):
-        return self._valid
-
-
-    @property
-    def has_impl(self):
-        return self._impl is not None
-
-
-    def _resolve(self, token):
-        """
-        Given a token and the information gathered so far,
-        
-        We move through states based on what should proceed one item
-        after another.
-
-        :param token: The token that we're looking to utilize
-        """
-        if self._lookup_state == self.STATIC_OR_VIRTUAL:
-            if token in ('', ' '):
-                return True
-
-            self._lookup_state = self.IS_CONST
-            if token in ('static', 'virtual'):
-                self._static_or_virtual = token
-                return True # Vital! We comsumed this!
-
-        if self._lookup_state == self.IS_CONST:
-            if token in ('', ' '):
-                return True
-
-            self._lookup_state = self.TYPE
-            if token == ('const'):
-                self._is_const_result = True
-                return True # Consumed!
-
-        if self._lookup_state == self.TYPE:
-
-            # When we enter the type lookup, this is the
-            # first time we might have multiple tokens to consume
-
-            # Check for encapsulation
-            if token in ('<', '('):
-                if not self._container.valid:
-                    self._container.char = token
-                    self._container.count = 1
-                elif self._container.char == token:
-                    self._container.count += 1
-
-            if self._container.valid and self._container.is_close(token):
-                self._container.count -= 1
-                if self._container.count <= 0:
-                    # Terminus
-                    self._container.char = None
-
-            if not self._container.valid and token in ('const', '{', ';', '='):
-
-                #
-                # We're out of scope should have reached the end of the type,
-                # name, and args. Because of this, we now have to filter
-                # backwards to find the name and args, splitting them from
-                # the type
-                #
-                scope_count = 0
-                first_scope = True
-                rem_count = 0
-
-                for rev_token in self._type_and_name[::-1]:
-                    rem_count += 1
-
-                    if first_scope and rev_token == ' ':
-                        continue
-
-                    if rev_token == ')': # Remember, we're in reverse
-                        if scope_count >= 1:
-                            self._args.append(rev_token)
-
-                        first_scope = False
-                        scope_count += 1
-
-                    elif rev_token == '(':
-                        scope_count -= 1
-                        if scope_count >= 1:
-                            self._args.append(rev_token)
-
-                    elif scope_count >= 1:
-                        self._args.append(rev_token)
-
-                    elif scope_count == 0:
-                        self._name = rev_token
-                        self._valid = True # If we've made it here, we should be good
-                        break
-
-                self._args = self._args[::-1] # Went in backwards
-                self._type = ''.join(self._type_and_name[:-rem_count])
-
-                #
-                # Make sure we take care of the terminal token.
-                #
-                if token == 'const':
-                    self._addendum = 'const'
-
-                elif token == '{':
-                    self._container.char = token
-                    self._container.count = 1
-                    self._impl = token
-                    self._lookup_state = self.IMPL
-
-                elif token == ';':
-                    self._complete_string += token
-                    return False
-
-            else:
-                self._type_and_name.append(token)
-
-        elif self._lookup_state == self.IMPL:
-            if not self._container.valid:
-                return False # We're out of the implementation
-
-            if token == '{':
-                self._container.count += 1
-
-            if token == '}':
-                self._container.count -= 1
-
-            if self._container.count <= 0:
-                # We've terminates
-                self._impl += token
-                self._container.char = None
-            else:
-                self._impl += token
-
-        return True
-
-
-    def to_dict(self):
-        return {
-            'static_or_virtual' : self._static_or_virtual,
-            'is_const'          : self._is_const_result,
-            'type'              : self._type.strip(),
-            'method'            : self._name.strip(),
-            'args'              : ''.join(self._args),
-            'addendum'          : self._addendum,
-            'impl'              : self._impl
-        }
-
-
-    def found(self):
-        return self._complete_string
-
-
-    @classmethod
-    def from_text(cls, view, text):
-        state = FunctionState()
-
-        izer = CppTokenizer(view, use_line=text)
-        with izer.include_white_space():
-            for token in izer:
-                if not state._resolve(token):
-                    break # We've hit the end of our function
-                state._complete_string += token
-
-        return state
-
-    @classmethod
-    def from_position(cls, view, position):
-        state = FunctionState()
-
-        izer = CppTokenizer(view, start=position[1] + 1)
-        with izer.include_white_space():
-            for token in izer:
-                if not state._resolve(token):
-                    break
-                state._complete_string += token
-
-        return state
-
 
 # ----------------------------------------------------------------------------
 # -- Text Commands
 
 class CppDeclareInSourceCommand(_BaseCppCommand):
     """
-    The text comand that is run to declare a method from our header file within
-    our source
+    A command for implementing methods where required.
+
+    This command supports a few distinct actions.
+
+    - Implement in Source
+    - Implement outside of Scope
+    - Move implementation to Source
+    - Move implementation outside of scope
+    - Copy impl signature to clipboard
+
+    This command can (mostly) pull appart a function delared in a given scope
+    using the FunctionState and some internal hueristics. The biggest
+    challenge is the shear number of caveats in the C++ language. Nothing a
+    whole log of if statements won't solve I suppose.
     """
 
-    # This is a header only function
-    flags = _BaseCppCommand.IN_HEADER
+    flags = _BaseCppCommand.IN_HEADER # | _BaseCppCommand.IN_SOURCE <- eventually
 
-    # FIXME: This has a finite limitation on templating, we need to handle this
-    # better. Probably with the tokenizer and some deeper parsing
-    HEADER_FUNCTION = re.compile(
-        r'(\s+)?(?P<static_or_virtual>static|virtual)?(\s+)?'\
-        r'(?P<is_const>const)?(\s)?(?P<type>[^\s]+)(\s)?'\
-        r'(?P<encap>\<(?:(?:\<(?:(?:\<(?:[^<>])*\>)|(?:[^<>]))*\>)|(?:[^<>]))*\>)?(\s)'\
-        r'(?P<method>[^\s\(]+)((\s+)?\()+?(?P<args>[^\;]+)?'\
-        r'((\s+)?\))+?(\s+)?(?P<addendum>[^\;|\{]+)?(?P<impl>\{)?'
-    )
-
+    #
+    # The basic implementation format string
+    #
     DECLARE_FORMAT = "{type}{ownership}{method}({source_arguments}){classifiers}"
 
     @classmethod
     def get_commands(cls, detail):
         """
         Check to see if this is a header function of some sort
-        TODO: Use the tokenizer to parse the file rather than the regex mess
         """
         view = detail.view
 
@@ -438,8 +159,14 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
             move_header.update({ 'in_' : 'header', 'move_to': 'header' })
 
             commands = [
-                ["Move Implementation To {}".format(os.path.basename(detail.source)), 'header_file', move_source],
-                ["Move Implementation Outside Class", 'header_file', move_header]
+                ["move_impl_to_source",
+                 "Move Implementation To {}".format(os.path.basename(detail.source)),
+                 detail.current_file_type,
+                 move_source],
+                ["move_impl_outside_class",
+                 "Move Implementation Outside Class",
+                 detail.current_file_type,
+                 move_header]
             ]
 
         else:
@@ -454,15 +181,24 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
             header_declare = deepcopy(match_data)
             header_declare.update({ 'in_' : 'header' })
             commands = [
-                ["Declare In {}".format(os.path.basename(detail.source)), 'source_file', source_declare],
+                ['delc_in_source',
+                 "Declare In {}".format(os.path.basename(detail.source)),
+                 'source_file',
+                 source_declare],
                 # This works in the header_file
-                ["Declare In {}".format(os.path.basename(detail.header)), 'header_file', header_declare],
+                ['delc_in_header',
+                 "Declare In {}".format(os.path.basename(detail.header)),
+                 'header_file',
+                 header_declare],
             ]
 
         copy_declare = deepcopy(match_data)
         copy_declare.update({ 'in_' : 'clipboard' })
         commands.append(
-            ["Copy Declaration to Clipboard", 'header_file', copy_declare]
+            ['copy_delc',
+             'Copy Declaration to Clipboard',
+             'header_file',
+             copy_declare]
         )
 
         return commands
@@ -477,25 +213,31 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
             output += '::'
         return output
 
-
-    def run(self, edit, **data):
+    def build_delc(self, data):
         """
-        Build the source declaration and place it into the source file
-        TODO: Use the tokenizer to parse the file rather than all this hand holding
+        Given data, construct the signature based on ownership as well as
+        clean up the types for default values, handling the additional
+        classifiers (virtual, static, const, etc)
+
+        :param data: The data containing various settings passed by the
+        get_commands() above
+        :return: tuple(signature_string, data copy that's been manipulated)
         """
         local_data = data.copy()
 
         # -- Ownership path (if any)
-        local_data['ownership'] = self._build_ownership(data['ownership_chain'])
+        local_data['ownership'] = self._build_ownership(
+            local_data['ownership_chain']
+        )
 
         # -- Check for const and pointer/references
-        if data.get('is_const'):
+        if local_data.get('is_const'):
             local_data['type'] = 'const ' + local_data['type']
 
-        if data.get('encap'):
-            local_data['type'] += data['encap']
+        if local_data.get('encap'):
+            local_data['type'] += local_data['encap']
 
-        method = data.get('method')
+        method = local_data.get('method')
         if method.startswith('*') or method.startswith('&'):
             point, method = method[0], method[1:]
             local_data['type'] = local_data['type'] + ' ' + point
@@ -504,11 +246,11 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
             local_data['type'] += ' '
 
         # -- Source Arguments
-        if data['args'] is None:
+        if local_data['args'] is None:
             local_data['source_arguments'] = ''
         else:
             source_arguments = []
-            for arg in data['args'].split(','):
+            for arg in local_data['args'].split(','):
                 trimmed = arg.strip()
                 if "=" in trimmed:
                     # Clean away default vales
@@ -519,20 +261,32 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
 
         # -- Additional Classifiers
         local_data['classifiers'] = ''
-        if data['addendum'] is not None:
-            if 'const' in data['addendum']:
+        if local_data['addendum'] is not None:
+            if 'const' in local_data['addendum']:
                 local_data['classifiers'] += ' const'
 
         decl = CppDeclareInSourceCommand.DECLARE_FORMAT.format(**local_data)
+        return (decl, local_data)
 
-        if data['in_'] in ['header', 'source']:
+
+    def run(self, edit, **data):
+        """
+        Construct the complete function signature, handling the implementation
+        as requested, and spawn a worker to do the actual work. We use this in
+        the event that we have to move to another file to do the last bits of
+        work (e.g. move commands need to remove the impl to place it elsewhere)
+        """
+        decl, local_data = self.build_delc(data)
+
+        if local_data['in_'] in ['header', 'source']:
+
             impl_string = '\n{\n    \n}\n'
-            if data.get('impl'):
-                impl_string = '\n' + data['impl']
+            if local_data.get('impl'):
+                impl_string = '\n' + local_data['impl']
 
             full_boddy = '\n\n' + decl + impl_string;
 
-            if data['in_'] == 'source':
+            if local_data['in_'] == 'source':
                 # For the time being, we declare at the end of the source file
                 point = self.view.size()
 
@@ -540,8 +294,8 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
 
                 # We attempt to declare just outside the highest ownership scope
                 point = None
-                if data['ownership_chain']:
-                    point = CppTokenizer.location_outside(self.view, data['ownership_chain'][0])
+                if local_data['ownership_chain']:
+                    point = CppTokenizer.location_outside(self.view, local_data['ownership_chain'][0])
                 
                 if point is None:
                     point = self.view.size()
@@ -555,6 +309,9 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
             self.view.show_at_center(location)
 
         else:
+            #
+            # A simple copy action
+            #
             impl_string = '\n{\n}\n'
             if data.get('impl'):
                 impl_string = '\n' + data['impl']
@@ -646,8 +403,14 @@ class CppGetterSetterFunctionsCommand(_BaseCppCommand):
         with_imply.update({ 'impl' : True })
 
         return [
-            ['Generate Getter/Setter', 'header_file', match_data],
-            ['Generate Getter/Setter (With Implementation)', 'header_file', with_imply]
+            ['gen_getset',
+             'Generate Getter/Setter',
+             'header_file',
+             match_data],
+            ['gen_getset_w_impl',
+             'Generate Getter/Setter (With Implementation)',
+             'header_file',
+             with_imply]
         ]
 
 

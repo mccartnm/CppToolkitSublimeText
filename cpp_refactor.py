@@ -147,7 +147,7 @@ class CppRefactorListener(sublime_plugin.EventListener):
                     after_one = True
 
                 for menu_option in menu_commands:
-                    command_name, *menu_data = menu_option
+                    hotkey_name, command_name, *menu_data = menu_option
 
                     to_open = possible_command.default_open
                     if len(menu_data) > 1:
@@ -159,7 +159,8 @@ class CppRefactorListener(sublime_plugin.EventListener):
                         "subcommand" : _BaseCppCommand.subl_command_name(possible_command),
                         "default_open" : to_open,
                         "header_file" : header,
-                        "source_file" : source
+                        "source_file" : source,
+                        'detail' : detail.to_json() # Might as well have it all
                     })
                     output.append(
                         { "command" : "cpp_refactor",

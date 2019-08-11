@@ -54,7 +54,7 @@ private:
     void setSecretValue(float secretValue) { m_secretValue = secretValue; }
 
     const std::list<math_history> &getHistory() const;
-    void setHistory(const std::list<math_history> &history);
+    void setHistory(const std::list<math_history> &history) override;
 
     std::list<math_history> m_history;
 
