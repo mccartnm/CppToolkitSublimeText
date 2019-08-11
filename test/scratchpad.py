@@ -123,7 +123,7 @@ class FunctionState(object):
                 for rev_token in self._type_and_name[::-1]:
                     rem_count += 1
 
-                    if first_scope and rev_token == ' ':
+                    if first_scope and (rev_token == ' ' or rev_token.isalnum()):
                         continue
 
                     if rev_token == '=':
@@ -212,7 +212,7 @@ class FunctionState(object):
         print (state.valid)
         return state
 
-function_string = "std::list<math> m_history = float(1.0);"
+function_string = "std::string type() const override;"
 # function_string = 'virtual foo<bar<baz, std::function<void(const QString &)>>> my_foo(QString blarg = "faz", foo<bar(kattt)> ok);'
 
 fs = FunctionState.from_text(None, function_string)

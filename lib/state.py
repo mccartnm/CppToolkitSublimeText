@@ -149,7 +149,7 @@ class FunctionState(object):
                 for rev_token in self._type_and_name[::-1]:
                     rem_count += 1
 
-                    if first_scope and rev_token == ' ':
+                    if first_scope and (rev_token == ' ' or rev_token.isalnum()):
                         continue
 
                     if rev_token == '=':
