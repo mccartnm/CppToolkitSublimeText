@@ -13,7 +13,7 @@ from .cpp_refactor_commands import CppTokenizer, _BaseCppCommand
 from .cpp_refactor_commands import CppRefactorDetails, FunctionState
 
 __author__ = 'Michael McCartney'
-__version__ = '0.0.2'
+__version__ = '0.3.0'
 
 
 def plugin_loaded():

@@ -594,12 +594,16 @@ class CppRefactorCommand(sublime_plugin.WindowCommand):
         Based on the command passed, let's handle the 
         """
         show_file = data[data['default_open']]
-        show_view = self.window.find_open_file(show_file)
 
-        if show_view is None:
-            show_view = self.window.open_file(show_file)
+        if self.window.active_view().file_name() != show_file:
+            show_view = self.window.find_open_file(show_file)
 
-        self.window.focus_view(show_view)
+            if show_view is None:
+                show_view = self.window.open_file(show_file)
+
+                self.window.focus_view(show_view)
+        else:
+            show_view = self.window.active_view()
         
         # This is async in the event that we need to wait for
         # the view to load (which happens on another thread)
