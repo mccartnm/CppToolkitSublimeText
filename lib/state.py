@@ -144,6 +144,7 @@ class FunctionState(object):
                 scope_count = 0
                 first_scope = True
                 rem_count = 0
+                found_scope = False
 
                 for rev_token in self._type_and_name[::-1]:
                     rem_count += 1
@@ -151,7 +152,11 @@ class FunctionState(object):
                     if first_scope and rev_token == ' ':
                         continue
 
+                    if rev_token == '=':
+                        found_scope = False
+
                     if rev_token == ')': # Remember, we're in reverse
+                        found_scope = True
                         if scope_count >= 1:
                             self._args.append(rev_token)
 
@@ -159,6 +164,7 @@ class FunctionState(object):
                         scope_count += 1
 
                     elif rev_token == '(':
+                        found_scope = True
                         scope_count -= 1
                         if scope_count >= 1:
                             self._args.append(rev_token)
@@ -168,7 +174,7 @@ class FunctionState(object):
 
                     elif scope_count == 0:
                         self._name = rev_token
-                        self._valid = True # If we've made it here, we should be good
+                        self._valid = found_scope # If we've made it here, we should be good
                         break
 
                 self._args = self._args[::-1] # Went in backwards
@@ -183,7 +189,7 @@ class FunctionState(object):
                 elif token == '{':
                     self._container.char = token
                     self._container.count = 1
-                    self._impl = token
+                    self._impl = token + '\n'
                     self._lookup_state = self.IMPL
 
                 elif token == ';':
@@ -204,7 +210,7 @@ class FunctionState(object):
                 self._container.count -= 1
 
             if self._container.count <= 0:
-                # We've terminates
+                # We've terminated
                 self._impl += token
                 self._container.char = None
             else:
@@ -229,28 +235,29 @@ class FunctionState(object):
         return self._complete_string
 
 
+    def _from_tokenizer(self, izer):
+        """
+        """        
+        with izer.include_white_space():
+            for token in izer:
+                if not self._resolve(token):
+                    break # We've hit the end of our function
+
+                if self._lookup_state == self.IMPL:
+                    izer.temp_no_trim()
+
+                self._complete_string += token
+
     @classmethod
     def from_text(cls, view, text):
         state = FunctionState()
-
         izer = CppTokenizer(view, use_line=text)
-        with izer.include_white_space():
-            for token in izer:
-                if not state._resolve(token):
-                    break # We've hit the end of our function
-                state._complete_string += token
-
+        state._from_tokenizer(izer)
         return state
 
     @classmethod
     def from_position(cls, view, position):
         state = FunctionState()
-
         izer = CppTokenizer(view, start=position[1] + 1)
-        with izer.include_white_space():
-            for token in izer:
-                if not state._resolve(token):
-                    break
-                state._complete_string += token
-
+        state._from_tokenizer(izer)
         return state

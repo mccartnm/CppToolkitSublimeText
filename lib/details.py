@@ -18,6 +18,7 @@ class CppRefactorDetails(object):
         self._header = kwargs.get('header')
         self._source = kwargs.get('source')
         self._current_file_type = kwargs.get('current_file_type')
+        self._marked_position = kwargs.get('marked_position')
 
     def to_json(self):
         """
@@ -32,8 +33,18 @@ class CppRefactorDetails(object):
             'current_line' : self.current_line,
             'header' : self.header,
             'source' : self.source,
-            'current_file_type' : self.current_file_type
+            'current_file_type' : self.current_file_type,
+            'marked_position' : self.marked_position
         }
+
+
+    @property
+    def marked_position(self):
+        """
+        :return: The position that we think is most likely the start of a given item
+        """
+        return self._marked_position
+    
 
     @property
     def view(self):

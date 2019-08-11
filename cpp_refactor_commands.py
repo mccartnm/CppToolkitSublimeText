@@ -79,6 +79,33 @@ class _BaseCppCommand(sublime_plugin.TextCommand, metaclass=_BaseCppRefactorMeta
         pass
 
 
+class InteralInsertCommand(sublime_plugin.TextCommand):
+    """
+    Quick insert command for running on different views. Quick and dirty.
+    """
+
+    @classmethod
+    def fire(cls, view, data):
+        while view.is_loading():
+            time.sleep(0.1)
+        command_name = _BaseCppCommand.subl_command_name(InteralInsertCommand)
+        view.run_command(command_name, data)
+
+
+    def run(self, edit, **data):
+        full_body = data['full_body']
+        point = data['point'] or self.view.size()
+        self.view.window().focus_view(self.view)
+        self.view.insert(edit, point, full_body)
+        location = point + (len(full_body) - 3)
+        row, col = self.view.rowcol(location)
+
+        self.view.sel().clear()
+        self.view.sel().add(sublime.Region(self.view.text_point(row, col)))
+        self.view.show_at_center(location)
+
+
+
 # ----------------------------------------------------------------------------
 # -- Text Commands
 
@@ -141,7 +168,8 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
         match_data.update({
             "current_line" : detail.current_line,
             "ownership_chain" : chain,
-            "function_priv" : func_priv
+            "function_priv" : func_priv,
+            'original_position' : original_position
         })
 
         commands = []
@@ -153,10 +181,10 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
             #
 
             move_source = deepcopy(match_data)
-            move_source.update({ 'in_' : 'header', 'move_to' : 'source' })
+            move_source.update({ 'in_' : 'header', 'move_to' : 'source_file' })
 
             move_header = deepcopy(match_data)
-            move_header.update({ 'in_' : 'header', 'move_to': 'header' })
+            move_header.update({ 'in_' : 'header', 'move_to': 'header_file' })
 
             commands = [
                 ["move_impl_to_source",
@@ -212,6 +240,32 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
         if output:
             output += '::'
         return output
+
+
+    def _clean_impl(self, impl):
+        """
+        Dedent and make sure we've closed the scopes
+        :param impl: Raw implementation string we usually get from the FunctionState
+        :return: str 
+        """
+        import textwrap
+        return '{' + textwrap.indent(textwrap.dedent(impl[1:-1]), '    ') + '}'
+
+
+    def _impl_to_regex(self, impl):
+        """
+        To find the implementation as it exists, we inject whitespace finding utilites
+        to find it however it's written in sublime
+        """
+        output = ''
+        ws_finder = r'((\s)+)?'
+        items = impl.split('\n')
+        for i, line in enumerate(items):
+            output += ws_finder + re.escape(line.strip())
+            if i != (len(items) - 1):
+                output += ws_finder
+        return output
+
 
     def build_delc(self, data):
         """
@@ -272,9 +326,9 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
     def run(self, edit, **data):
         """
         Construct the complete function signature, handling the implementation
-        as requested, and spawn a worker to do the actual work. We use this in
+        as requested, and spawn a worker to do the actual manip. We use this in
         the event that we have to move to another file to do the last bits of
-        work (e.g. move commands need to remove the impl to place it elsewhere)
+        work (e.g. move commands need to remove the impl to "place" it elsewhere)
         """
         decl, local_data = self.build_delc(data)
 
@@ -282,13 +336,19 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
 
             impl_string = '\n{\n    \n}\n'
             if local_data.get('impl'):
-                impl_string = '\n' + local_data['impl']
+                impl_string = '\n' + self._clean_impl(local_data['impl'])
 
-            full_boddy = '\n\n' + decl + impl_string;
+            full_body = '\n\n' + decl + impl_string;
 
-            # if local_data.get('impl'):
-            #     # If we have the impl, we need to move it!
-            #     self.view.find(local_data[''])
+            # __import__('pprint').pprint(local_data)
+            if local_data.get('impl'):
+                # If we have the impl, we need to move it!
+                f = self._impl_to_regex(impl_string)
+                region = self.view.find(
+                    self._impl_to_regex(impl_string),
+                    self.view.layout_to_text(local_data['detail']['marked_position'])
+                )
+                self.view.replace(edit, region, ';')
 
             if local_data['in_'] == 'source':
                 # For the time being, we declare at the end of the source file
@@ -304,13 +364,37 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
                 if point is None:
                     point = self.view.size()
 
-            self.view.insert(edit, point, full_boddy)
-            location = point + (len(full_boddy) - 3)
-            row, col = self.view.rowcol(location)
+            insert_data = {
+                'full_body' : full_body,
+                'point' : point
+            }
 
-            self.view.sel().clear()
-            self.view.sel().add(sublime.Region(self.view.text_point(row, col)))
-            self.view.show_at_center(location)
+            edit_view = self.view
+            window = self.view.window()
+
+            move_info = local_data.get('move_to')
+            if move_info and (move_info != local_data['detail']['current_file_type']):
+
+                insert_data['point'] = None
+
+                # We have to switch to the other file
+                if local_data['detail']['current_file_type'] == 'header_file':
+                    edit_file = local_data['detail']['source']
+                else:
+                    edit_file = local_data['detail']['header']
+                edit_view = window.find_open_file(edit_file)
+
+                if edit_view is None:
+                    edit_vieww = window.open_file(edit_file)
+
+            #
+            # Fire off another thread to make sure we have a loaded buffer
+            #
+            b_thread = threading.Thread(
+                target=InteralInsertCommand.fire,
+                args=(edit_view, insert_data)
+            )
+            b_thread.start()
 
         else:
             #
@@ -320,8 +404,8 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
             if data.get('impl'):
                 impl_string = '\n' + data['impl']
 
-            full_boddy = decl + impl_string;
-            sublime.set_clipboard(full_boddy)
+            full_body = decl + impl_string;
+            sublime.set_clipboard(full_body)
 
 
 class CppGetterSetterFunctionsCommand(_BaseCppCommand):
@@ -523,4 +607,4 @@ class CppRefactorCommand(sublime_plugin.WindowCommand):
             target=self._fire_command,
             args=(show_view, data)
         )
-        a_thread.start() # Cleanup?
+        a_thread.start() # Cleanup? - hopefully gc'll handle it

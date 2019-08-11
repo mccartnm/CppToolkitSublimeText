@@ -21,6 +21,7 @@ class CppTokenizer(object):
         self._use_line = use_line
         self._current_tokens = None
         self._skip_whitespace = True
+        self._trim = True
 
 
     def __iter__(self):
@@ -39,6 +40,7 @@ class CppTokenizer(object):
         self._skip_whitespace = False
         yield
         self._skip_whitespace = True
+        self._trim = True
 
 
     def _context_line(self, pos: (int, float)):
@@ -46,6 +48,13 @@ class CppTokenizer(object):
         Get the line of text from our current view based on a position
         """
         return self._view.substr(self._view.line(self._view.layout_to_text((0, pos))))        
+
+
+    def temp_no_trim(self):
+        """
+        Disable timming the lines until we exit a whitespace scope
+        """
+        self._trim = False
 
 
     def _get_tokens(self, line: str) -> list:
@@ -56,7 +65,10 @@ class CppTokenizer(object):
         current = ''
 
         previous = None
-        line = line.strip()
+        if self._trim:
+            line = line.strip()
+        else:
+            line = line + '\n'
         spin = 0
 
         for i, char in enumerate(line):
@@ -114,7 +126,7 @@ class CppTokenizer(object):
                     self._current_tokens = None
                     return None
 
-                toks = self._get_tokens(self._context_line(self._current).strip())
+                toks = self._get_tokens(self._context_line(self._current))
                 self._current += self._view.line_height()
                 if toks:
                     self._current_tokens = toks

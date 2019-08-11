@@ -118,6 +118,7 @@ class FunctionState(object):
                 scope_count = 0
                 first_scope = True
                 rem_count = 0
+                found_scope = False
 
                 for rev_token in self._type_and_name[::-1]:
                     rem_count += 1
@@ -125,7 +126,11 @@ class FunctionState(object):
                     if first_scope and rev_token == ' ':
                         continue
 
+                    if rev_token == '=':
+                        found_scope = False
+
                     if rev_token == ')': # Remember, we're in reverse
+                        found_scope = True
                         if scope_count >= 1:
                             self._args.append(rev_token)
 
@@ -133,6 +138,7 @@ class FunctionState(object):
                         scope_count += 1
 
                     elif rev_token == '(':
+                        found_scope = True
                         scope_count -= 1
                         if scope_count >= 1:
                             self._args.append(rev_token)
@@ -142,7 +148,7 @@ class FunctionState(object):
 
                     elif scope_count == 0:
                         self._name = rev_token
-                        self._valid = True # If we've made it here, we should be good
+                        self._valid = found_scope # If we've made it here, we should be good
                         break
 
                 self._args = self._args[::-1] # Went in backwards
@@ -201,12 +207,35 @@ class FunctionState(object):
         with izer.include_white_space():
             for token in izer:
                 state._resolve(token)
-        
 
         __import__('pprint').pprint(state.to_dict())
+        print (state.valid)
         return state
 
-function_string = "static std::list<foo> clearHistory() const { m_history.clear(); }    virtual foo<bar<baz, std::function<void(const QString &)>>> my_foo();"
+function_string = "std::list<math> m_history = float(1.0);"
 # function_string = 'virtual foo<bar<baz, std::function<void(const QString &)>>> my_foo(QString blarg = "faz", foo<bar(kattt)> ok);'
 
 fs = FunctionState.from_text(None, function_string)
+
+# f = """{
+#     heelp.clean();
+#     my grod = foo.bar();
+#     {
+#         "okay";
+#     }
+# }
+# """
+
+# import re
+
+# output = ''
+# ws_finder = r'((\s)+)?'
+# for line in f.split('\n'):
+
+#     trim = line.strip()
+#     output += ws_finder + re.escape(trim) + ws_finder
+
+
+# print (output)
+
+# print (re.match(output, f))

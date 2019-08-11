@@ -112,7 +112,7 @@ class CppRefactorListener(sublime_plugin.EventListener):
                 og_pos = self._previous_line(view, og_pos)
 
         fs = FunctionState.from_position(view, og_pos)
-        return fs.found()
+        return (fs.found(), og_pos)
 
 
     def _build_header_menu(self, view, command, args, pos, header, source):
@@ -130,7 +130,7 @@ class CppRefactorListener(sublime_plugin.EventListener):
 
         current_word = view.substr(view.word(view.layout_to_text(pos)))
 
-        current_line = self._current_line(view, pos)
+        current_line, mark_pos = self._current_line(view, pos)
         after_one = False
 
         detail = CppRefactorDetails(
@@ -142,7 +142,8 @@ class CppRefactorListener(sublime_plugin.EventListener):
             current_word=current_word,
             current_line=current_line,
             header=header,
-            source=source
+            source=source,
+            marked_position=mark_pos
         )
 
         for possible_command in _BaseCppCommand._cppr_registry['header']:
