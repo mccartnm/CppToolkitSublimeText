@@ -69,16 +69,21 @@ class CppRefactorListener(sublime_plugin.EventListener):
                 done = True
                 break
 
+            # Strip away anything after a line comment
+            if '//' in prev_line:
+                prev_line = prev_line[:prev_line.index('//')]
+
             rev_line = prev_line[::-1]
 
             # Check if the line ends in a multiline comment (it's backwards)
-            if rev_line.startswith('/*'):
+            if rev_line.startswith('/*') or rev_line.startswith(':'):
                 og_pos = self._next_line(view, og_pos) # Too far
                 done = True
                 break
 
             create_line = ''
             should_prepend = True
+            should_prev = True
             in_quotes = False
 
             for i, char in enumerate(rev_line):
@@ -95,16 +100,20 @@ class CppRefactorListener(sublime_plugin.EventListener):
                     create_line = char + create_line
                 else:
                     # We've hit a delimit!
+                    og_pos = self._next_line(view, og_pos)
+                    should_prev = False
                     done = True
                     break
 
             if should_prepend:
                 current_line = create_line + current_line
 
-            og_pos = self._previous_line(view, og_pos)
+            if should_prev:
+                og_pos = self._previous_line(view, og_pos)
 
         fs = FunctionState.from_position(view, og_pos)
         return fs.found()
+
 
     def _build_header_menu(self, view, command, args, pos, header, source):
         """

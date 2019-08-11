@@ -286,6 +286,10 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
 
             full_boddy = '\n\n' + decl + impl_string;
 
+            # if local_data.get('impl'):
+            #     # If we have the impl, we need to move it!
+            #     self.view.find(local_data[''])
+
             if local_data['in_'] == 'source':
                 # For the time being, we declare at the end of the source file
                 point = self.view.size()
