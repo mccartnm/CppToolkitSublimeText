@@ -39,6 +39,12 @@ class CppRefactorDetails(object):
 
 
     @property
+    def point(self, view = None):
+        view = view or self._view
+        return view.layout_to_text(self.pos)
+
+
+    @property
     def marked_position(self):
         """
         :return: The position that we think is most likely the start of a given item

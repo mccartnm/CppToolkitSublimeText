@@ -1,5 +1,7 @@
 Cpp Toolkit
 ===========
+<a href="https://packagecontrol.io/packages/CppToolkit"><img src="https://packagecontrol.herokuapp.com/downloads/CppToolkit.svg"/></a>
+
 A collection of utilities for managing C++ code implementation.
 
 > Disclaimer: Sublime is not a fully featured C++ IDE and this plugin doesn't try to make it one. It simply tries to speed up your usual work

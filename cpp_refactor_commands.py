@@ -141,10 +141,13 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
         """
         view = detail.view
 
+        if not view.match_selector(detail.point, 'entity.name.function'):
+            return []
+
         fs = FunctionState.from_text(view, detail.current_line)
 
         if not fs.valid:
-            return None
+            return []
 
         original_position = detail.pos[:]
         chain = CppTokenizer.ownership_chain(view, original_position)
@@ -436,6 +439,10 @@ class CppGetterSetterFunctionsCommand(_BaseCppCommand):
         Getting the commands...
         """
         view = detail.view
+
+        if not view.match_selector(detail.point, 'variable'):
+            return []
+
         func_priv = 'default'
         func_priv_line = None
         func_priv_loc = (0, 0)
