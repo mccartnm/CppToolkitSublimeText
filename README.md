@@ -6,7 +6,14 @@ A collection of utilities for managing C++ code implementation.
 
 > Disclaimer: Sublime is not a fully featured C++ IDE and this plugin doesn't try to make it one. It simply tries to speed up your usual work
 
-# Capabilities
+# Features
+
+- Build Implementation from the class definition
+- Generate get/set commands for internal members
+- Move implementations outside of the class definition
+- (Coming soon) Build implementations for an entire class
+
+# Quick Tour
 
 ## Auto Implement
 Many IDEs out there make use their inherent understanding of you project through syntax and preprocessing to present perks like being able to automatically declare methods from the header within the source. This saves the developer _loads_ of time.
@@ -65,11 +72,13 @@ Ultimately, this tool is parsing the file and doing what it can with immediate i
 # Install
 Using Package Control [Sublime Package Manager](http://wbond.net/sublime_packages/package_control)
 
-To install use these commands (once it's up on the Sublime Package Repository).
+To install use these commands.
 
 * Hit `Ctrl + Shift + P`
 * Type `install` and select `Package Control: Install Package`
 * Type `CppToolkit` and select `CppToolkit`
+
+Or just clone this repo and place it into your Sublime user data directory under Packages.
 
 # Roadmap
 There are many things to do for this plugin that I'm hoping to tick away at in my spare time
@@ -83,3 +92,4 @@ There are many things to do for this plugin that I'm hoping to tick away at in m
 7. ~~Getter/Setter functions of members~~ (done)
 8. Have the commands work in both source and header, just using the parser to understand what commands can be used
 9. Hotkeys for select functions
+10. Implement a whole class by simply right clicking on the class name (woah)
