@@ -13,7 +13,7 @@ class BasicCalculator()
 {
 public:
     virtual std::string type() const = 0; // Test for virtual and const
-}
+};
 
 /*
     Fun calculator class for example purposes and
@@ -41,10 +41,21 @@ class FloatCalculator : public BasicCalculator
 
     std::string type() const override;
 
-private:
-    const std::list<math_history> &getHistory() const;
-    void setHistory(const std::list<math_history> &history);
+    // Test that we can move the impl
+    static std::list<foo> clearHistory() const
+    {
+        m_history.clear();
+        if (foo)
+        {
+            bar.okay();
+            Foo;
+        }
+    }
 
+    virtual foo<bar<baz, std::function<void(const std::string &)>>>
+    my_foo() const;
+
+private:
     std::list<math_history> m_history;
 
     float m_secretValue;

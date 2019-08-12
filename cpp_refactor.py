@@ -9,10 +9,11 @@ import sublime
 import sublime_plugin
 
 from .lib import utils
-from .cpp_refactor_commands import CppTokenizer, _BaseCppCommand, CppRefactorDetails
+from .cpp_refactor_commands import CppTokenizer, _BaseCppCommand
+from .cpp_refactor_commands import CppRefactorDetails, FunctionState
 
 __author__ = 'Michael McCartney'
-__version__ = '0.0.2'
+__version__ = '0.3.0'
 
 
 def plugin_loaded():
@@ -53,14 +54,9 @@ class CppRefactorListener(sublime_plugin.EventListener):
         to handle search back until we find a proper delimiter
         :return: str
         """
+
         og_pos = pos[:]
         current_line = self._context_line(view, pos)
-
-        while not current_line.endswith(';'):
-            pos = (pos[0], pos[1] + view.line_height())
-            if pos[1] > view.layout_extent()[1]:
-                break
-            current_line += self._context_line(view, pos)
 
         og_pos = self._previous_line(view, og_pos)
         done = False
@@ -73,15 +69,21 @@ class CppRefactorListener(sublime_plugin.EventListener):
                 done = True
                 break
 
+            # Strip away anything after a line comment
+            if '//' in prev_line:
+                prev_line = prev_line[:prev_line.index('//')]
+
             rev_line = prev_line[::-1]
 
             # Check if the line ends in a multiline comment (it's backwards)
-            if rev_line.startswith('/*'):
+            if rev_line.startswith('/*') or rev_line.startswith(':'):
+                og_pos = self._next_line(view, og_pos) # Too far
                 done = True
                 break
 
             create_line = ''
             should_prepend = True
+            should_prev = True
             in_quotes = False
 
             for i, char in enumerate(rev_line):
@@ -98,15 +100,20 @@ class CppRefactorListener(sublime_plugin.EventListener):
                     create_line = char + create_line
                 else:
                     # We've hit a delimit!
+                    og_pos = self._next_line(view, og_pos)
+                    should_prev = False
                     done = True
                     break
 
             if should_prepend:
                 current_line = create_line + current_line
 
-            og_pos = self._previous_line(view, og_pos)
+            if should_prev:
+                og_pos = self._previous_line(view, og_pos)
 
-        return current_line.strip()
+        fs = FunctionState.from_position(view, og_pos)
+        return (fs.found(), og_pos)
+
 
     def _build_header_menu(self, view, command, args, pos, header, source):
         """
@@ -122,8 +129,9 @@ class CppRefactorListener(sublime_plugin.EventListener):
         output = []
 
         current_word = view.substr(view.word(view.layout_to_text(pos)))
+        point = view.layout_to_text(pos)
 
-        current_line = self._current_line(view, pos)
+        current_line, mark_pos = self._current_line(view, pos)
         after_one = False
 
         detail = CppRefactorDetails(
@@ -135,10 +143,21 @@ class CppRefactorListener(sublime_plugin.EventListener):
             current_word=current_word,
             current_line=current_line,
             header=header,
-            source=source
+            source=source,
+            marked_position=mark_pos
         )
 
         for possible_command in _BaseCppCommand._cppr_registry['header']:
+
+            if possible_command.selectors:
+                ok = False
+                selector = ' | '.join(possible_command.selectors)
+                if view.match_selector(point, selector):
+                    ok = True
+
+            if not ok:
+                continue
+
             menu_commands = possible_command.get_commands(detail)
 
             if menu_commands:
@@ -149,7 +168,7 @@ class CppRefactorListener(sublime_plugin.EventListener):
                     after_one = True
 
                 for menu_option in menu_commands:
-                    command_name, *menu_data = menu_option
+                    hotkey_name, command_name, *menu_data = menu_option
 
                     to_open = possible_command.default_open
                     if len(menu_data) > 1:
@@ -161,7 +180,8 @@ class CppRefactorListener(sublime_plugin.EventListener):
                         "subcommand" : _BaseCppCommand.subl_command_name(possible_command),
                         "default_open" : to_open,
                         "header_file" : header,
-                        "source_file" : source
+                        "source_file" : source,
+                        'detail' : detail.to_json() # Might as well have it all
                     })
                     output.append(
                         { "command" : "cpp_refactor",
