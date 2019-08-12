@@ -129,19 +129,7 @@ class CppRefactorListener(sublime_plugin.EventListener):
         output = []
 
         current_word = view.substr(view.word(view.layout_to_text(pos)))
-
-
-        # p = view.layout_to_text(pos)
-        # print (view.scope_name(p))
-        # if view.match_selector(p, 'entity.name.function'):
-        #     print ("HERERE") # CRAZY USEFUL
-        #
-        # scope = CppScope(view.scope_name(view.layout_to_text(pos)))
-        # e.g. source.c++ meta.namespace....
-        # Create a CppScope object to quick identify where t.f. we are
-        # and use that as a _much_ easier way to tell if something
-        # can be run or not.
-        #
+        point = view.layout_to_text(pos)
 
         current_line, mark_pos = self._current_line(view, pos)
         after_one = False
@@ -160,6 +148,16 @@ class CppRefactorListener(sublime_plugin.EventListener):
         )
 
         for possible_command in _BaseCppCommand._cppr_registry['header']:
+
+            if possible_command.selectors:
+                ok = False
+                selector = ' | '.join(possible_command.selectors)
+                if view.match_selector(point, selector):
+                    ok = True
+
+            if not ok:
+                continue
+
             menu_commands = possible_command.get_commands(detail)
 
             if menu_commands:

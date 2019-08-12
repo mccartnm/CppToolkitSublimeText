@@ -42,9 +42,10 @@ class FloatCalculator : public BasicCalculator
     std::string type() const override;
 
     // Test that we can move the impl
-    static std::list<foo> clearHistory() const {
+    static std::list<foo> clearHistory() const
+    {
         m_history.clear();
-        foo;
+        if (foo)
         {
             bar.okay();
             Foo;

@@ -26,6 +26,11 @@ class _BaseCppCommand(sublime_plugin.TextCommand, metaclass=_BaseCppRefactorMeta
             # be tested for commands to run.
             flags = _BaseCppCommand.IN_HEADER | _BaseCppCommand.IN_SOURCE
 
+            # Sublime selector that determine if the context fits the
+            # item in question. If empty/undefined, get_commands() is run
+            # no matter what
+            selectors = [...]
+
             @classmethod
             def get_commands(cls, detail):
                 # .. Overload here to return a list of commands in the format of:
@@ -46,6 +51,8 @@ class _BaseCppCommand(sublime_plugin.TextCommand, metaclass=_BaseCppRefactorMeta
         so be careful when introducing any heavy logic.
     """
     flags = 0
+
+    selectors = []
 
     default_open = 'source_file'
 
@@ -134,15 +141,14 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
     #
     DECLARE_FORMAT = "{type}{ownership}{method}({source_arguments}){classifiers}"
 
+    selectors = ['entity.name.function']
+
     @classmethod
     def get_commands(cls, detail):
         """
         Check to see if this is a header function of some sort
         """
         view = detail.view
-
-        if not view.match_selector(detail.point, 'entity.name.function'):
-            return []
 
         fs = FunctionState.from_text(view, detail.current_line)
 
@@ -429,6 +435,8 @@ class CppGetterSetterFunctionsCommand(_BaseCppCommand):
     GETTER_FORMAT = '\n{indent}{classifier}{type} {p_or_r}get{property_upper}() const{get_ending}'
     SETTER_FORMAT = '\n{indent}void set{property_upper}({set_classifier}{type} {p_or_r}{property_name}){set_ending}'
 
+    selectors = ['variable']
+
     def get_const_types(self):
         settings = sublime.load_settings('CppToolkit.sublime-settings')
         return list(settings.get('non_const_types', ['float', 'double', 'int']))
@@ -439,9 +447,6 @@ class CppGetterSetterFunctionsCommand(_BaseCppCommand):
         Getting the commands...
         """
         view = detail.view
-
-        if not view.match_selector(detail.point, 'variable'):
-            return []
 
         func_priv = 'default'
         func_priv_line = None
