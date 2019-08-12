@@ -306,7 +306,7 @@ class CppDeclareInSourceCommand(_BaseCppCommand):
             local_data['type'] = local_data['type'] + ' ' + point
             local_data['method'] = method
         else:
-            local_data['type'] += ' '
+            local_data['type'] += ' ' if local_data['type'] else ''
 
         # -- Source Arguments
         if local_data['args'] is None:
